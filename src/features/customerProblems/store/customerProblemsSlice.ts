@@ -51,7 +51,7 @@ export const fetchCustomerProblems = createAsyncThunk(
   'customerProblems/fetchCustomerProblems',
   async (
     params: {
-      filters: any;
+      filters: Record<string, any>;
       pagination: { page: number; pageSize: number };
       sorting: { field: string; order: 'asc' | 'desc' };
     },
