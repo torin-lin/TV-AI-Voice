@@ -1,0 +1,105 @@
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { Button } from '../common/Button';
+
+interface MainLayoutProps {
+  children: React.ReactNode;
+}
+
+/**
+ * 主应用布局组件
+ * 包含导航栏和侧边栏
+ */
+const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const location = useLocation();
+
+  // 导航菜单项
+  const menuItems = [
+    { path: '/dashboard', label: '仪表板', icon: '📊' },
+    { path: '/version-records', label: '版本记录', icon: '📝' },
+    { path: '/customer-problems', label: '问题追踪', icon: '🐛' },
+    { path: '/voice-records', label: '语音记录', icon: '🎤' },
+    { path: '/recommendations', label: 'AI 推荐', icon: '🤖' },
+    { path: '/settings', label: '设置', icon: '⚙️' },
+  ];
+
+  // 检查当前路由是否活跃
+  const isActive = (path: string) => location.pathname === path;
+
+  return (
+    <div className="flex h-screen bg-gray-100">
+      {/* 侧边栏 */}
+      <div
+        className={`${
+          sidebarOpen ? 'w-64' : 'w-20'
+        } bg-gradient-to-b from-blue-600 to-cyan-500 text-white transition-all duration-300 flex flex-col`}
+      >
+        {/* Logo */}
+        <div className="p-4 border-b border-blue-400">
+          <div className="flex items-center justify-between">
+            <div className={`${!sidebarOpen && 'hidden'} text-xl font-bold`}>
+              TV AI Voice
+            </div>
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-1 hover:bg-blue-500 rounded"
+            >
+              {sidebarOpen ? '◀' : '▶'}
+            </button>
+          </div>
+        </div>
+
+        {/* 菜单 */}
+        <nav className="flex-1 p-4 space-y-2">
+          {menuItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                isActive(item.path)
+                  ? 'bg-white text-blue-600 font-semibold'
+                  : 'hover:bg-blue-500 text-white'
+              }`}
+            >
+              <span className="text-xl">{item.icon}</span>
+              {sidebarOpen && <span>{item.label}</span>}
+            </Link>
+          ))}
+        </nav>
+
+        {/* 底部 */}
+        <div className="p-4 border-t border-blue-400">
+          <div className={`text-xs text-blue-100 ${!sidebarOpen && 'hidden'}`}>
+            v1.0.0
+          </div>
+        </div>
+      </div>
+
+      {/* 主内容区 */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 顶部栏 */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">
+            {menuItems.find((item) => isActive(item.path))?.label || 'TV AI Voice'}
+          </h1>
+          <div className="flex items-center gap-4">
+            <Button variant="secondary" size="sm">
+              帮助
+            </Button>
+            <Button variant="secondary" size="sm">
+              关于
+            </Button>
+          </div>
+        </div>
+
+        {/* 内容区 */}
+        <div className="flex-1 overflow-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default MainLayout;
