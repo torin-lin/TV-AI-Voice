@@ -227,8 +227,7 @@ export async function getCustomerProblemsByStatus(
 /**
  * 按版本号获取客户问题
  */
-export async function getCustomerProblemsByVersion(versionNumber: string): Promise<CustomerProblem[]> {
-  const db = getDatabase();
+export async function getCustomerProblemsByVersion(): Promise<CustomerProblem[]> {
   // CustomerProblem 没有 versionNumber 字段，返回空数组
   return [];
 }

@@ -9,7 +9,6 @@ import { getDatabase } from '../../../db';
 interface CustomerProblemsState {
   items: CustomerProblem[];
   loading: boolean;
-  classifying: boolean;
   error: string | null;
   filters: {
     keyword?: string;
@@ -32,7 +31,6 @@ interface CustomerProblemsState {
 const initialState: CustomerProblemsState = {
   items: [],
   loading: false,
-  classifying: false,
   error: null,
   filters: {},
   pagination: {
