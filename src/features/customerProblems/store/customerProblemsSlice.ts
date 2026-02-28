@@ -97,11 +97,13 @@ export const fetchCustomerProblems = createAsyncThunk(
       // 应用排序
       let sorted = await query.toArray();
       sorted.sort((a, b) => {
-        const aVal = a[sorting.field as keyof CustomerProblem];
-        const bVal = b[sorting.field as keyof CustomerProblem];
+        const aVal = a[sorting.field as keyof CustomerProblem] as any;
+        const bVal = b[sorting.field as keyof CustomerProblem] as any;
 
-        if (aVal < bVal) return sorting.order === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sorting.order === 'asc' ? 1 : -1;
+        if (aVal && bVal) {
+          if (aVal < bVal) return sorting.order === 'asc' ? -1 : 1;
+          if (aVal > bVal) return sorting.order === 'asc' ? 1 : -1;
+        }
         return 0;
       });
 
@@ -283,9 +285,11 @@ const customerProblemsSlice = createSlice({
       })
       .addCase(updateCustomerProblem.fulfilled, (state, action) => {
         state.loading = false;
-        const index = state.items.findIndex((item) => item.id === action.payload.id);
-        if (index !== -1) {
-          state.items[index] = action.payload;
+        if (action.payload) {
+          const index = state.items.findIndex((item) => item.id === action.payload!.id);
+          if (index !== -1) {
+            state.items[index] = action.payload;
+          }
         }
       })
       .addCase(updateCustomerProblem.rejected, (state, action) => {

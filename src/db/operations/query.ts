@@ -29,18 +29,24 @@ export async function queryVersionRecords(
 
   // 应用过滤条件
   if (filters.riskLevel) {
-    query = query.filter((record) => record.riskLevel === filters.riskLevel);
+    const riskLevelMap: Record<string, string> = {
+      'low': '低',
+      'medium': '中',
+      'high': '高',
+    };
+    const chineseRiskLevel = riskLevelMap[filters.riskLevel] || filters.riskLevel;
+    query = query.filter((record) => record.riskLevel === chineseRiskLevel);
   }
 
   if (filters.startDate && filters.endDate) {
     query = query.filter(
-      (record) => record.createdAt >= filters.startDate && record.createdAt <= filters.endDate
+      (record) => record.createdAt >= filters.startDate! && record.createdAt <= filters.endDate!
     );
   }
 
   if (filters.modifiedModules && filters.modifiedModules.length > 0) {
     query = query.filter((record) =>
-      filters.modifiedModules.some((module) => record.modifiedModules.includes(module))
+      filters.modifiedModules!.some((module) => record.modifiedModules.includes(module))
     );
   }
 
@@ -73,8 +79,7 @@ export async function searchVersionRecords(
   query = query.filter(
     (record) =>
       record.versionNumber.toLowerCase().includes(lowerKeyword) ||
-      record.modificationContent.toLowerCase().includes(lowerKeyword) ||
-      record.testConclusion.toLowerCase().includes(lowerKeyword)
+      record.changeDescription.toLowerCase().includes(lowerKeyword)
   );
 
   const total = await query.count();
@@ -134,20 +139,22 @@ export async function queryCustomerProblems(
 
   // 应用过滤条件
   if (filters.category) {
-    query = query.filter((record) => record.category === filters.category);
+    query = query.filter((record) => record.classification === filters.category);
   }
 
   if (filters.status) {
-    query = query.filter((record) => record.status === filters.status);
-  }
-
-  if (filters.versionNumber) {
-    query = query.filter((record) => record.versionNumber === filters.versionNumber);
+    const statusMap: Record<string, string> = {
+      'open': '开放',
+      'in_progress': '进行中',
+      'resolved': '已解决',
+    };
+    const chineseStatus = statusMap[filters.status] || filters.status;
+    query = query.filter((record) => record.status === chineseStatus);
   }
 
   if (filters.startDate && filters.endDate) {
     query = query.filter(
-      (record) => record.date >= filters.startDate && record.date <= filters.endDate
+      (record) => record.createdAt >= filters.startDate! && record.createdAt <= filters.endDate!
     );
   }
 
@@ -179,9 +186,7 @@ export async function searchCustomerProblems(
 
   query = query.filter(
     (record) =>
-      record.tvModel.toLowerCase().includes(lowerKeyword) ||
-      record.originalSpeech.toLowerCase().includes(lowerKeyword) ||
-      record.recognitionResult.toLowerCase().includes(lowerKeyword)
+      record.description.toLowerCase().includes(lowerKeyword)
   );
 
   const total = await query.count();
@@ -200,7 +205,7 @@ export async function getCustomerProblemsByCategory(
   category: string
 ): Promise<CustomerProblem[]> {
   const db = getDatabase();
-  return await db.customerProblems.where('category').equals(category).toArray();
+  return await db.customerProblems.where('classification').equals(category).toArray();
 }
 
 /**
@@ -210,7 +215,13 @@ export async function getCustomerProblemsByStatus(
   status: 'open' | 'in_progress' | 'resolved'
 ): Promise<CustomerProblem[]> {
   const db = getDatabase();
-  return await db.customerProblems.where('status').equals(status).toArray();
+  const statusMap: Record<string, string> = {
+    'open': '开放',
+    'in_progress': '进行中',
+    'resolved': '已解决',
+  };
+  const chineseStatus = statusMap[status] || status;
+  return await db.customerProblems.where('status').equals(chineseStatus).toArray();
 }
 
 /**
@@ -218,7 +229,8 @@ export async function getCustomerProblemsByStatus(
  */
 export async function getCustomerProblemsByVersion(versionNumber: string): Promise<CustomerProblem[]> {
   const db = getDatabase();
-  return await db.customerProblems.where('versionNumber').equals(versionNumber).toArray();
+  // CustomerProblem 没有 versionNumber 字段，返回空数组
+  return [];
 }
 
 // ============ 语音识别记录查询 ============
@@ -302,9 +314,9 @@ export async function getVersionRecordStats(): Promise<{
 
   return {
     total: records.length,
-    passed: records.filter((r) => r.smokeTestResult === 'pass').length,
-    failed: records.filter((r) => r.smokeTestResult === 'fail').length,
-    pending: records.filter((r) => r.smokeTestResult === 'pending').length,
+    passed: records.filter((r) => r.smokeTestResult === '通过').length,
+    failed: records.filter((r) => r.smokeTestResult === '失败').length,
+    pending: records.filter((r) => r.smokeTestResult === '未测试').length,
   };
 }
 
@@ -322,9 +334,9 @@ export async function getCustomerProblemStats(): Promise<{
 
   return {
     total: records.length,
-    open: records.filter((r) => r.status === 'open').length,
-    inProgress: records.filter((r) => r.status === 'in_progress').length,
-    resolved: records.filter((r) => r.status === 'resolved').length,
+    open: records.filter((r) => r.status === '开放').length,
+    inProgress: records.filter((r) => r.status === '进行中').length,
+    resolved: records.filter((r) => r.status === '已解决').length,
   };
 }
 
@@ -337,7 +349,8 @@ export async function getProblemCategoryStats(): Promise<Record<string, number>>
 
   const stats: Record<string, number> = {};
   for (const record of records) {
-    stats[record.category] = (stats[record.category] || 0) + 1;
+    const category = record.classification || '未分类';
+    stats[category] = (stats[category] || 0) + 1;
   }
 
   return stats;

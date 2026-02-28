@@ -88,8 +88,9 @@ export function getWeekRange(): { start: number; end: number } {
   const today = new Date();
   const dayOfWeek = today.getDay();
   const diff = today.getDate() - dayOfWeek;
-  const start = new Date(today.setDate(diff)).getTime();
-  start.setHours(0, 0, 0, 0);
+  const startDate = new Date(today.setDate(diff));
+  startDate.setHours(0, 0, 0, 0);
+  const start = startDate.getTime();
   const end = start + 7 * 24 * 60 * 60 * 1000 - 1;
   return { start, end };
 }

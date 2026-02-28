@@ -25,17 +25,23 @@ const VersionRecordModal: React.FC<VersionRecordModalProps> = ({
   const handleSubmit = async (data: Partial<VersionRecord>) => {
     setLoading(true);
     try {
+      // 确保 riskLevel 有值
+      const submitData = {
+        ...data,
+        riskLevel: data.riskLevel || '中',
+      } as Omit<VersionRecord, 'id' | 'createdAt' | 'updatedAt'>;
+
       if (record?.id) {
         // 编辑现有记录
         await dispatch(
           updateVersionRecord({
             id: record.id,
-            data,
+            data: submitData,
           })
         ).unwrap();
       } else {
         // 创建新记录
-        await dispatch(createVersionRecord(data)).unwrap();
+        await dispatch(createVersionRecord(submitData)).unwrap();
       }
       onClose();
     } catch (error) {

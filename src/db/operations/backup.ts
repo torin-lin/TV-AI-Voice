@@ -130,11 +130,14 @@ export async function cleanupExpiredData(daysOld: number = 30): Promise<number> 
 
     // 清理客户问题
     const problemsToDelete = await db.customerProblems
-      .where('date')
+      .where('createdAt')
       .below(cutoffTime)
       .toArray();
     deletedCount += problemsToDelete.length;
-    await db.customerProblems.bulkDelete(problemsToDelete.map((p) => p.id));
+    const problemIds = problemsToDelete.map((p) => p.id).filter((id): id is string => id !== undefined);
+    if (problemIds.length > 0) {
+      await db.customerProblems.bulkDelete(problemIds);
+    }
 
     // 清理语音识别记录
     const voiceToDelete = await db.voiceRecognitionRecords
@@ -142,7 +145,10 @@ export async function cleanupExpiredData(daysOld: number = 30): Promise<number> 
       .below(cutoffTime)
       .toArray();
     deletedCount += voiceToDelete.length;
-    await db.voiceRecognitionRecords.bulkDelete(voiceToDelete.map((v) => v.id));
+    const voiceIds = voiceToDelete.map((v) => v.id).filter((id): id is string => id !== undefined);
+    if (voiceIds.length > 0) {
+      await db.voiceRecognitionRecords.bulkDelete(voiceIds);
+    }
 
     console.log(`Cleaned up ${deletedCount} expired records`);
     return deletedCount;

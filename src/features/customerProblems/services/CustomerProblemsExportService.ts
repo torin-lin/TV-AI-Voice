@@ -67,9 +67,8 @@ export const exportToCSV = (problems: CustomerProblem[], filename: string) => {
     // 转换为 CSV
     const csv = Papa.unparse(data, {
       header: true,
-      dynamicTyping: false,
       encoding: 'UTF-8',
-    });
+    } as any);
 
     // 添加 BOM 以支持中文
     const bom = '\uFEFF';

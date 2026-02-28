@@ -39,10 +39,9 @@ const VersionRecordsPage: React.FC = () => {
       fetchVersionRecords({
         filters,
         pagination,
-        sorting,
       })
     );
-  }, [dispatch, filters, pagination, sorting]);
+  }, [dispatch, filters, pagination]);
 
   // 处理添加新记录
   const handleAddRecord = () => {
