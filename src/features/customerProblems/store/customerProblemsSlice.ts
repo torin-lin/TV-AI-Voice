@@ -74,19 +74,19 @@ export const fetchCustomerProblems = createAsyncThunk(
       }
 
       if (filters.classification) {
-        query = query.filter((item) => item.classification === filters.classification);
+        query = query.filter((item) => item.classification === filters.classification!);
       }
 
       if (filters.status) {
-        query = query.filter((item) => item.status === filters.status);
+        query = query.filter((item) => item.status === filters.status!);
       }
 
       if (filters.startDate) {
-        query = query.filter((item) => item.createdAt >= filters.startDate);
+        query = query.filter((item) => item.createdAt >= filters.startDate!);
       }
 
       if (filters.endDate) {
-        query = query.filter((item) => item.createdAt <= filters.endDate);
+        query = query.filter((item) => item.createdAt <= filters.endDate!);
       }
 
       // 获取总数
