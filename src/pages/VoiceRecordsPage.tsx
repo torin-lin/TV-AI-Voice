@@ -107,7 +107,7 @@ const VoiceRecordsPage: React.FC = () => {
               <Card>
                 <div className="text-center">
                   <p className="text-gray-600 text-sm">准确率</p>
-                  <p className="text-2xl font-bold text-cyan-600 mt-2">
+                  <p className="text-2xl font-bold text-cyan-500 mt-2">
                     {accuracy}%
                   </p>
                 </div>

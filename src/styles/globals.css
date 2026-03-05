@@ -19,8 +19,8 @@ body {
 
 /* 蓝色渐变主题 */
 :root {
-  --color-primary-start: #0066cc;
-  --color-primary-end: #00ccff;
+  --color-primary-start: #2563EB;
+  --color-primary-end: #06B6D4;
 }
 
 /* 自定义滚动条 */
@@ -51,4 +51,75 @@ body {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+/* 流光特效 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.shimmer-active {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.08) 20%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.08) 80%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.5s ease-in-out infinite;
+}
+
+/* 按钮流光 */
+@keyframes btn-shimmer {
+  0% {
+    left: -100%;
+  }
+  50%, 100% {
+    left: 100%;
+  }
+}
+
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.15),
+    transparent
+  );
+  animation: btn-shimmer 3s ease-in-out infinite;
+}
+
+/* 侧边栏选中项流光边框 */
+@keyframes border-flow {
+  0%, 100% {
+    border-color: rgba(96, 165, 250, 0.6);
+    box-shadow: 0 0 8px rgba(96, 165, 250, 0.3), inset 0 0 8px rgba(96, 165, 250, 0.05);
+  }
+  50% {
+    border-color: rgba(34, 211, 238, 0.6);
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.4), inset 0 0 12px rgba(34, 211, 238, 0.08);
+  }
+}
+
+.glow-border {
+  border: 1px solid rgba(96, 165, 250, 0.5);
+  animation: border-flow 2s ease-in-out infinite;
 }

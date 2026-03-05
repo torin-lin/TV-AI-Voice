@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import MainLayout from './components/layout/MainLayout';
 import DashboardPage from './pages/DashboardPage';
 import VersionRecordsPage from './features/versionRecords/components/VersionRecordsPage';
+import ReleaseNotesPage from './features/releaseNotes/components/ReleaseNotesPage';
 import CustomerProblemsPage from './features/customerProblems/components/CustomerProblemsPage';
 import RecommendationsPage from './features/recommendations/components/RecommendationsPage';
 import VoiceRecordsPage from './pages/VoiceRecordsPage';
@@ -18,6 +19,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/version-records" element={<VersionRecordsPage />} />
+          <Route path="/release-notes" element={<ReleaseNotesPage />} />
           <Route path="/customer-problems" element={<CustomerProblemsPage />} />
           <Route path="/voice-records" element={<VoiceRecordsPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />

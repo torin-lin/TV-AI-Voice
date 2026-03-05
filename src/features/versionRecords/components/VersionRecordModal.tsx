@@ -57,7 +57,7 @@ const VersionRecordModal: React.FC<VersionRecordModalProps> = ({
         {/* 模态框头 */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-900">
-            {record ? '编辑版本记录' : '添加新版本记录'}
+            {record ? '编辑QA版本记录' : '添加新QA版本记录'}
           </h2>
           <button
             onClick={onClose}

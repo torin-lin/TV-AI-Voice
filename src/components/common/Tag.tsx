@@ -17,7 +17,7 @@ export const Tag: React.FC<TagProps> = ({
   const baseClasses = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-medium';
 
   const variantClasses = {
-    primary: 'bg-blue-100 text-blue-800',
+    primary: 'bg-blue-200 text-blue-700',
     secondary: 'bg-gray-100 text-gray-800',
   };
 

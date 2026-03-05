@@ -89,7 +89,7 @@ const RecommendationResult: React.FC<RecommendationResultProps> = ({
       {/* 推荐理由 */}
       <div>
         <p className="text-sm font-semibold text-gray-900 mb-2">推荐理由</p>
-        <p className="text-gray-700 bg-blue-50 p-3 rounded-lg border border-blue-200">
+        <p className="text-gray-700 bg-blue-100 p-3 rounded-lg border border-blue-300">
           {recommendation.reasoning}
         </p>
       </div>

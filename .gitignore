@@ -32,9 +32,15 @@ yarn-error.log*
 coverage/
 .nyc_output/
 
+# Runtime data
+data/
+uploads/
+*.db
+*.db-wal
+*.db-shm
+
 # Misc
 .cache/
 temp/
 tmp/
 *.bak
-node_modules

@@ -29,6 +29,7 @@ const VersionRecordsPage: React.FC = () => {
     pagination,
     sorting,
   } = useSelector((state: RootState) => state.versionRecords);
+  const currentProject = useSelector((state: RootState) => state.project.currentProject);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<VersionRecord | null>(null);
@@ -37,11 +38,11 @@ const VersionRecordsPage: React.FC = () => {
   useEffect(() => {
     dispatch(
       fetchVersionRecords({
-        filters,
+        filters: { ...filters, projectGroup: currentProject },
         pagination,
       })
     );
-  }, [dispatch, filters, pagination]);
+  }, [dispatch, filters, pagination, currentProject]);
 
   // 处理添加新记录
   const handleAddRecord = () => {
@@ -80,20 +81,20 @@ const VersionRecordsPage: React.FC = () => {
 
   // 处理导出 Excel
   const handleExportExcel = () => {
-    exportToExcel(items, '版本测试记录.xlsx');
+    exportToExcel(items, 'QA版本记录.xlsx');
   };
 
   // 处理导出 CSV
   const handleExportCSV = () => {
-    exportToCSV(items, '版本测试记录.csv');
+    exportToCSV(items, 'QA版本记录.csv');
   };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full mx-auto">
         {/* 页面标题 */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">版本测试记录</h1>
+          <h1 className="text-3xl font-bold text-gray-900">QA版本记录</h1>
           <p className="text-gray-600 mt-2">管理和追踪所有版本的测试记录</p>
         </div>
 

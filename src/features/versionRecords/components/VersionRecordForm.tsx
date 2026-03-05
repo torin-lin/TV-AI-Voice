@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { VersionRecord } from '../../../types/database';
 import { Button } from '../../../components/common/Button';
 import { Input } from '../../../components/common/Input';
 import { Select } from '../../../components/common/Select';
 import { Textarea } from '../../../components/common/Textarea';
+import { uploadDoc, getDocDownloadUrl, DocUploadResult } from '../../../services/DocUploadService';
+import { formatFileSize } from '../../../services/ApkUploadService';
 
 interface VersionRecordFormProps {
   record?: VersionRecord | null;
@@ -12,250 +14,329 @@ interface VersionRecordFormProps {
   loading?: boolean;
 }
 
-/**
- * 版本记录表单组件
- * 用于添加和编辑版本记录
- */
-const VersionRecordForm: React.FC<VersionRecordFormProps> = ({
-  record,
-  onSubmit,
-  onCancel,
-  loading = false,
-}) => {
+const DEFAULT_MODULES = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络', 'Android', 'UI', '数据库'];
+const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
+
+/** 标签输入组件 */
+const TagInput: React.FC<{
+  label: string;
+  required?: boolean;
+  tags: string[];
+  onChange: (tags: string[]) => void;
+  suggestions: string[];
+  error?: string;
+}> = ({ label, required, tags, onChange, suggestions, error }) => {
+  const [customValue, setCustomValue] = useState('');
+  const availableSuggestions = suggestions.filter((s) => !tags.includes(s));
+
+  const addTag = (tag: string) => {
+    const trimmed = tag.trim();
+    if (trimmed && !tags.includes(trimmed)) onChange([...tags, trimmed]);
+  };
+  const removeTag = (tag: string) => onChange(tags.filter((t) => t !== tag));
+  const handleCustomAdd = () => { if (customValue.trim()) { addTag(customValue); setCustomValue(''); } };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {tags.map((tag) => (
+            <span key={tag} className="inline-flex items-center gap-1 px-3 py-1 bg-blue-200 text-blue-700 rounded-full text-sm">
+              {tag}
+              <button type="button" onClick={() => removeTag(tag)} className="text-blue-700 hover:text-blue-800 font-bold ml-1">×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      {availableSuggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {availableSuggestions.map((s) => (
+            <button key={s} type="button" onClick={() => addTag(s)}
+              className="px-3 py-1 border border-gray-300 text-gray-600 rounded-full text-sm hover:bg-blue-100 hover:border-blue-400 hover:text-blue-600 transition-colors">
+              + {s}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input type="text" value={customValue} onChange={(e) => setCustomValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCustomAdd(); } }}
+          placeholder="自定义添加..." className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <button type="button" onClick={handleCustomAdd}
+          className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-blue-100 hover:text-blue-600 transition-colors">添加</button>
+      </div>
+      {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+    </div>
+  );
+};
+
+/** 关联 PR/CR 输入组件 */
+const LinkedIssuesInput: React.FC<{
+  issues: string[];
+  onChange: (issues: string[]) => void;
+}> = ({ issues, onChange }) => {
+  const [inputValue, setInputValue] = useState('');
+
+  const addIssue = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed && !issues.includes(trimmed)) {
+      onChange([...issues, trimmed]);
+      setInputValue('');
+    }
+  };
+
+  const removeIssue = (issue: string) => {
+    onChange(issues.filter((i) => i !== issue));
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">关联的 PR/CR</label>
+      {issues.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {issues.map((issue) => (
+            <span key={issue} className="inline-flex items-center gap-1 px-3 py-1 bg-purple-50 border border-purple-200 text-purple-800 rounded-full text-sm">
+              <a href={`${ZMIND_BASE_URL}${issue}`} target="_blank" rel="noopener noreferrer"
+                className="hover:underline hover:text-purple-600" onClick={(e) => e.stopPropagation()}>
+                #{issue}
+              </a>
+              <button type="button" onClick={() => removeIssue(issue)} className="text-purple-500 hover:text-purple-800 font-bold ml-1">×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addIssue(); } }}
+          placeholder="输入 PR 或 CR 号，按回车添加"
+          className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <button type="button" onClick={addIssue}
+          className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-blue-100 hover:text-blue-600 transition-colors">关联</button>
+      </div>
+      <p className="text-gray-500 text-xs mt-1">添加后点击编号可跳转到 zmind 对应页面</p>
+    </div>
+  );
+};
+
+const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit, onCancel, loading = false }) => {
   const [formData, setFormData] = useState<Partial<VersionRecord>>({
     versionNumber: '',
+    firmwareVersion: '',
+    linkedIssues: [],
     changeDescription: '',
     modifiedModules: [],
     riskLevel: '中',
     smokeTestResult: '未测试',
     voiceRegressionResult: '未测试',
     systemRegressionResult: '未测试',
+    projectType: 'TV',
+    testCycle: '',
+    prototypeSource: '',
+    languageModel: '',
     notes: '',
   });
-
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
+  const [docUploadError, setDocUploadError] = useState('');
+  const docInputRef = useRef<HTMLInputElement>(null);
 
-  // 初始化表单数据
-  useEffect(() => {
-    if (record) {
-      setFormData(record);
-    }
-  }, [record]);
+  useEffect(() => { if (record) setFormData(record); }, [record]);
 
-  // 验证表单
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
-
-    if (!formData.versionNumber?.trim()) {
-      newErrors.versionNumber = '版本号不能为空';
-    }
-
-    if (!formData.changeDescription?.trim()) {
-      newErrors.changeDescription = '修改内容不能为空';
-    }
-
-    if (!formData.modifiedModules || formData.modifiedModules.length === 0) {
-      newErrors.modifiedModules = '至少选择一个修改模块';
-    }
-
+    if (!formData.versionNumber?.trim()) newErrors.versionNumber = '版本号不能为空';
+    if (!formData.changeDescription?.trim()) newErrors.changeDescription = '修改内容不能为空';
+    if (!formData.modifiedModules || formData.modifiedModules.length === 0) newErrors.modifiedModules = '至少选择一个修改模块';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // 处理表单提交
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
 
-    if (!validateForm()) {
+    // 如果有文档文件需要上传
+    if (docFile) {
+      setDocUploading(true);
+      setDocUploadError('');
+      uploadDoc(docFile).then((result: DocUploadResult) => {
+        setDocUploading(false);
+        if (result.success && result.data) {
+          onSubmit({
+            ...formData,
+            prototypeFileName: result.data.fileName,
+            prototypeFilePath: result.data.filePath,
+            prototypeFileSize: result.data.fileSize,
+          });
+        } else {
+          setDocUploadError(result.message || '文档上传失败');
+        }
+      }).catch((err) => {
+        setDocUploading(false);
+        setDocUploadError((err as Error).message || '文档上传失败');
+      });
       return;
     }
 
     onSubmit(formData);
   };
 
-  // 处理输入变化
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-    // 清除错误
-    if (errors[name]) {
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
-    }
-  };
-
-  // 处理模块选择变化
-  const handleModulesChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedOptions = Array.from(e.target.selectedOptions, (option) => option.value);
-    setFormData((prev) => ({
-      ...prev,
-      modifiedModules: selectedOptions,
-    }));
-    if (errors.modifiedModules) {
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors.modifiedModules;
-        return newErrors;
-      });
-    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors((prev) => { const n = { ...prev }; delete n[name]; return n; });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* 版本号 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          版本号 <span className="text-red-500">*</span>
-        </label>
-        <Input
-          type="text"
-          name="versionNumber"
-          value={formData.versionNumber || ''}
-          onChange={handleInputChange}
-          placeholder="例如: v1.0.0"
-          error={errors.versionNumber}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">版本号 <span className="text-red-500">*</span></label>
+        <Input type="text" name="versionNumber" value={formData.versionNumber || ''} onChange={handleInputChange} placeholder="例如: v1.0.0" error={errors.versionNumber} />
       </div>
+
+      {/* 项目类型 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">项目类型</label>
+        <Select name="projectType" value={formData.projectType || 'TV'} onChange={handleInputChange}
+          options={[{ value: 'TV', label: 'TV AI Voice' }, { value: 'Projector', label: 'Projector AI Voice' }, { value: 'STB', label: 'STB AI Voice' }]} />
+      </div>
+
+      {/* 固件版本号 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">固件版本号</label>
+        <Input type="text" name="firmwareVersion" value={formData.firmwareVersion || ''} onChange={handleInputChange} placeholder="例如: FW_2.1.3_20260301" />
+      </div>
+
+      {/* 关联的 PR/CR */}
+      <LinkedIssuesInput
+        issues={formData.linkedIssues || []}
+        onChange={(issues) => setFormData((prev) => ({ ...prev, linkedIssues: issues }))}
+      />
 
       {/* 修改内容 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          修改内容 <span className="text-red-500">*</span>
-        </label>
-        <Textarea
-          name="changeDescription"
-          value={formData.changeDescription || ''}
-          onChange={handleInputChange}
-          placeholder="描述本次版本的主要修改内容"
-          rows={3}
-          error={errors.changeDescription}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">修改内容 <span className="text-red-500">*</span></label>
+        <Textarea name="changeDescription" value={formData.changeDescription || ''} onChange={handleInputChange} placeholder="描述本次版本的主要修改内容" rows={3} error={errors.changeDescription} />
       </div>
 
       {/* 修改模块 */}
+      <TagInput label="修改模块" required tags={formData.modifiedModules || []}
+        onChange={(tags) => { setFormData((prev) => ({ ...prev, modifiedModules: tags })); if (errors.modifiedModules) setErrors((prev) => { const n = { ...prev }; delete n.modifiedModules; return n; }); }}
+        suggestions={DEFAULT_MODULES} error={errors.modifiedModules} />
+
+      {/* 语言模型 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          修改模块 <span className="text-red-500">*</span>
-        </label>
-        <select
-          multiple
-          name="modifiedModules"
-          value={formData.modifiedModules || []}
-          onChange={handleModulesChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="录音">录音</option>
-          <option value="蓝牙">蓝牙</option>
-          <option value="ASR">ASR</option>
-          <option value="NLU">NLU</option>
-          <option value="服务端">服务端</option>
-          <option value="网络">网络</option>
-          <option value="Android">Android</option>
-        </select>
-        {errors.modifiedModules && (
-          <p className="text-red-500 text-sm mt-1">{errors.modifiedModules}</p>
-        )}
-        <p className="text-gray-500 text-xs mt-1">按住 Ctrl/Cmd 可多选</p>
+        <label className="block text-sm font-medium text-gray-700 mb-1">语言模型</label>
+        <Input type="text" name="languageModel" value={formData.languageModel || ''} onChange={handleInputChange} placeholder="例如: GPT-4o、Qwen2.5" />
       </div>
 
       {/* 风险等级 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          风险等级
-        </label>
-        <Select
-          name="riskLevel"
-          value={formData.riskLevel || '中'}
-          onChange={handleInputChange}
-          options={[
-            { value: '低', label: '低' },
-            { value: '中', label: '中' },
-            { value: '高', label: '高' },
-          ]}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">风险等级</label>
+        <Select name="riskLevel" value={formData.riskLevel || '中'} onChange={handleInputChange}
+          options={[{ value: '低', label: '低' }, { value: '中', label: '中' }, { value: '高', label: '高' }]} />
       </div>
 
       {/* 冒烟测试结果 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          冒烟测试结果
-        </label>
-        <Select
-          name="smokeTestResult"
-          value={formData.smokeTestResult || '未测试'}
-          onChange={handleInputChange}
-          options={[
-            { value: '未测试', label: '未测试' },
-            { value: '通过', label: '通过' },
-            { value: '失败', label: '失败' },
-          ]}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">冒烟测试结果</label>
+        <Select name="smokeTestResult" value={formData.smokeTestResult || '未测试'} onChange={handleInputChange}
+          options={[{ value: '未测试', label: '未测试' }, { value: '通过', label: '通过' }, { value: '失败', label: '失败' }]} />
       </div>
 
       {/* 语音回归结果 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          语音回归结果
-        </label>
-        <Select
-          name="voiceRegressionResult"
-          value={formData.voiceRegressionResult || '未测试'}
-          onChange={handleInputChange}
-          options={[
-            { value: '未测试', label: '未测试' },
-            { value: '通过', label: '通过' },
-            { value: '失败', label: '失败' },
-          ]}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">语音回归结果</label>
+        <Select name="voiceRegressionResult" value={formData.voiceRegressionResult || '未测试'} onChange={handleInputChange}
+          options={[{ value: '未测试', label: '未测试' }, { value: '通过', label: '通过' }, { value: '失败', label: '失败' }]} />
       </div>
 
       {/* 系统回归结果 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          系统回归结果
-        </label>
-        <Select
-          name="systemRegressionResult"
-          value={formData.systemRegressionResult || '未测试'}
-          onChange={handleInputChange}
-          options={[
-            { value: '未测试', label: '未测试' },
-            { value: '通过', label: '通过' },
-            { value: '失败', label: '失败' },
-          ]}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">系统回归结果</label>
+        <Select name="systemRegressionResult" value={formData.systemRegressionResult || '未测试'} onChange={handleInputChange}
+          options={[{ value: '未测试', label: '未测试' }, { value: '通过', label: '通过' }, { value: '失败', label: '失败' }]} />
+      </div>
+
+      {/* 测试周期 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">测试周期</label>
+        <Input type="text" name="testCycle" value={formData.testCycle || ''} onChange={handleInputChange} placeholder="例如: 2026-03-01 ~ 2026-03-07" />
+      </div>
+
+      {/* 原型来源 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">原型来源</label>
+        <Input type="text" name="prototypeSource" value={formData.prototypeSource || ''} onChange={handleInputChange} placeholder="输入链接地址或文档描述" />
+        {formData.prototypeSource && (formData.prototypeSource.startsWith('http://') || formData.prototypeSource.startsWith('https://')) && (
+          <a href={formData.prototypeSource} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline text-xs mt-1 inline-block">
+            🔗 打开链接
+          </a>
+        )}
+
+        {/* 已有上传文档（编辑模式） */}
+        {formData.prototypeFileName && !docFile && (
+          <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg mt-2">
+            <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <a href={getDocDownloadUrl(formData.prototypeFilePath!)} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-green-800 hover:underline truncate block">
+                {formData.prototypeFileName}
+              </a>
+              <p className="text-xs text-green-600">{formData.prototypeFileSize ? formatFileSize(formData.prototypeFileSize) : ''}</p>
+            </div>
+            <button type="button" onClick={() => { setFormData((prev) => ({ ...prev, prototypeFileName: undefined, prototypeFilePath: undefined, prototypeFileSize: undefined })); }} className="text-red-500 hover:text-red-700 text-sm">移除</button>
+          </div>
+        )}
+
+        {/* 新选择的文档 */}
+        {docFile && (
+          <div className="flex items-center gap-3 p-3 bg-blue-100 border border-blue-300 rounded-lg mt-2">
+            <svg className="w-5 h-5 text-blue-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-blue-700 truncate">{docFile.name}</p>
+              <p className="text-xs text-blue-700">{formatFileSize(docFile.size)} · 待上传</p>
+            </div>
+            <button type="button" onClick={() => { setDocFile(null); setDocUploadError(''); if (docInputRef.current) docInputRef.current.value = ''; }} className="text-red-500 hover:text-red-700 text-sm">移除</button>
+          </div>
+        )}
+
+        {docUploadError && <p className="text-red-500 text-sm mt-1">{docUploadError}</p>}
+
+        {/* 上传按钮 */}
+        {!docFile && !formData.prototypeFileName && (
+          <div className="mt-2">
+            <button type="button" onClick={() => docInputRef.current?.click()}
+              className="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-blue-100 hover:border-blue-400 hover:text-blue-600 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              上传文档
+            </button>
+            <span className="text-gray-400 text-xs ml-2">支持 PDF、Word、图片等，最大 100MB</span>
+          </div>
+        )}
+        <input ref={docInputRef} type="file" onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (f.size > 100 * 1024 * 1024) { setDocUploadError('文件大小不能超过 100MB'); return; } setDocFile(f); setDocUploadError(''); } }} className="hidden" />
       </div>
 
       {/* 备注 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          备注
-        </label>
-        <Textarea
-          name="notes"
-          value={formData.notes || ''}
-          onChange={handleInputChange}
-          placeholder="添加任何额外的备注信息"
-          rows={2}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
+        <Textarea name="notes" value={formData.notes || ''} onChange={handleInputChange} placeholder="添加任何额外的备注信息" rows={2} />
       </div>
 
       {/* 按钮 */}
       <div className="flex gap-3 justify-end pt-4">
-        <Button onClick={onCancel} variant="secondary" disabled={loading}>
-          取消
-        </Button>
-        <Button type="submit" variant="primary" disabled={loading}>
-          {loading ? '保存中...' : '保存'}
-        </Button>
+        <Button onClick={onCancel} variant="secondary" disabled={loading || docUploading}>取消</Button>
+        <Button type="submit" variant="primary" disabled={loading || docUploading}>{docUploading ? '上传文档中...' : loading ? '保存中...' : '保存'}</Button>
       </div>
     </form>
   );

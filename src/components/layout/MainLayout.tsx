@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../common/Button';
+import ProjectSwitcher from './ProjectSwitcher';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -17,7 +18,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // 导航菜单项
   const menuItems = [
     { path: '/dashboard', label: '仪表板', icon: '📊' },
-    { path: '/version-records', label: '版本记录', icon: '📝' },
+    { path: '/version-records', label: 'QA版本记录', icon: '📝' },
+    { path: '/release-notes', label: 'Release Note', icon: '📋' },
     { path: '/customer-problems', label: '问题追踪', icon: '🐛' },
     { path: '/voice-records', label: '语音记录', icon: '🎤' },
     { path: '/recommendations', label: 'AI 推荐', icon: '🤖' },
@@ -33,10 +35,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <div
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
-        } bg-gradient-to-b from-blue-600 to-cyan-500 text-white transition-all duration-300 flex flex-col`}
+        } bg-gradient-to-b from-blue-600 to-cyan-500 text-white transition-all duration-300 flex flex-col shadow-2xl shadow-blue-500/20`}
       >
         {/* Logo */}
-        <div className="p-4 border-b border-blue-400">
+        <div className="p-4 border-b border-blue-400/30">
           <div className="flex items-center justify-between">
             <div className={`${!sidebarOpen && 'hidden'} text-xl font-bold`}>
               TV AI Voice
@@ -56,10 +58,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 ${
                 isActive(item.path)
-                  ? 'bg-white text-blue-600 font-semibold'
-                  : 'hover:bg-blue-500 text-white'
+                  ? 'bg-white/15 text-white font-semibold shimmer-active glow-border backdrop-blur-sm'
+                  : 'hover:bg-white/10 text-white/80 hover:text-white'
               }`}
             >
               <span className="text-xl">{item.icon}</span>
@@ -69,8 +71,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </nav>
 
         {/* 底部 */}
-        <div className="p-4 border-t border-blue-400">
-          <div className={`text-xs text-blue-100 ${!sidebarOpen && 'hidden'}`}>
+        <div className="p-4 border-t border-blue-400/30">
+          <div className={`text-xs text-blue-200 ${!sidebarOpen && 'hidden'}`}>
             v1.0.0
           </div>
         </div>
@@ -80,9 +82,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 顶部栏 */}
         <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">
-            {menuItems.find((item) => isActive(item.path))?.label || 'TV AI Voice'}
-          </h1>
+          <div className="flex items-center gap-6">
+            <ProjectSwitcher />
+            <h1 className="text-2xl font-bold text-gray-900">
+              {menuItems.find((item) => isActive(item.path))?.label || 'TV AI Voice'}
+            </h1>
+          </div>
           <div className="flex items-center gap-4">
             <Button variant="secondary" size="sm">
               帮助

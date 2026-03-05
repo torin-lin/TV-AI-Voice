@@ -1,0 +1,235 @@
+/**
+ * APK 文件上传路由
+ * 处理 APK 文件的上传、下载和管理
+ * 文件保存到服务端本地磁盘
+ */
+
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+
+/** APK 存储根目录 */
+const APK_STORAGE_DIR = process.env.APK_STORAGE_DIR || path.join(process.cwd(), 'uploads', 'apk');
+
+/** 单文件最大大小: 500MB */
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+/**
+ * 确保上传目录存在
+ */
+function ensureUploadDir(): void {
+  if (!fs.existsSync(APK_STORAGE_DIR)) {
+    fs.mkdirSync(APK_STORAGE_DIR, { recursive: true });
+    console.log(`APK 存储目录已创建: ${APK_STORAGE_DIR}`);
+  }
+}
+
+/**
+ * 生成唯一文件名，避免冲突
+ */
+function generateUniqueFileName(originalName: string): string {
+  const ext = path.extname(originalName);
+  const baseName = path.basename(originalName, ext);
+  const timestamp = Date.now();
+  const hash = crypto.randomBytes(4).toString('hex');
+  return `${baseName}_${timestamp}_${hash}${ext}`;
+}
+
+/**
+ * 格式化文件大小
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * 设置 APK 上传路由
+ * @param app Express 应用实例
+ */
+export function setupApkUploadRoutes(app: any): void {
+  ensureUploadDir();
+
+  /**
+   * POST /api/apk/upload
+   * 上传 APK 文件（使用 raw body）
+   *
+   * Headers:
+   *   x-file-name: 原始文件名
+   *   content-type: application/octet-stream
+   *
+   * Body: 二进制文件数据
+   */
+  app.post('/api/apk/upload', async (req: any, res: any) => {
+    try {
+      const originalName = decodeURIComponent(req.headers['x-file-name'] || 'unknown.apk');
+
+      // 验证文件扩展名
+      if (!originalName.toLowerCase().endsWith('.apk')) {
+        return res.status(400).json({
+          success: false,
+          message: '只允许上传 .apk 文件',
+        });
+      }
+
+      // 收集请求体数据
+      const chunks: Buffer[] = [];
+      let totalSize = 0;
+
+      await new Promise<void>((resolve, reject) => {
+        req.on('data', (chunk: Buffer) => {
+          totalSize += chunk.length;
+          if (totalSize > MAX_FILE_SIZE) {
+            reject(new Error(`文件大小超过限制 (最大 ${formatFileSize(MAX_FILE_SIZE)})`));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        req.on('end', resolve);
+        req.on('error', reject);
+      });
+
+      const fileBuffer = Buffer.concat(chunks);
+
+      if (fileBuffer.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: '上传文件为空',
+        });
+      }
+
+      // 生成唯一文件名并保存
+      const savedFileName = generateUniqueFileName(originalName);
+      const savedFilePath = path.join(APK_STORAGE_DIR, savedFileName);
+
+      fs.writeFileSync(savedFilePath, fileBuffer);
+
+      console.log(`APK 已保存: ${savedFileName} (${formatFileSize(fileBuffer.length)})`);
+
+      res.status(200).json({
+        success: true,
+        message: 'APK 上传成功',
+        data: {
+          fileName: originalName,
+          savedFileName,
+          filePath: `/api/apk/download/${savedFileName}`,
+          fileSize: fileBuffer.length,
+          fileSizeFormatted: formatFileSize(fileBuffer.length),
+          uploadedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error('APK 上传失败:', error);
+      res.status(500).json({
+        success: false,
+        message: 'APK 上传失败',
+        error: (error as Error).message,
+      });
+    }
+  });
+
+  /**
+   * GET /api/apk/download/:fileName
+   * 下载 APK 文件
+   */
+  app.get('/api/apk/download/:fileName', (req: any, res: any) => {
+    try {
+      const { fileName } = req.params;
+
+      // 防止路径遍历攻击
+      const safeName = path.basename(fileName);
+      const filePath = path.join(APK_STORAGE_DIR, safeName);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({
+          success: false,
+          message: '文件不存在',
+        });
+      }
+
+      const stat = fs.statSync(filePath);
+      res.setHeader('Content-Length', stat.size);
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}"`);
+
+      const readStream = fs.createReadStream(filePath);
+      readStream.pipe(res);
+    } catch (error) {
+      console.error('APK 下载失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '下载失败',
+        error: (error as Error).message,
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/apk/delete/:fileName
+   * 删除 APK 文件
+   */
+  app.delete('/api/apk/delete/:fileName', (req: any, res: any) => {
+    try {
+      const { fileName } = req.params;
+      const safeName = path.basename(fileName);
+      const filePath = path.join(APK_STORAGE_DIR, safeName);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({
+          success: false,
+          message: '文件不存在',
+        });
+      }
+
+      fs.unlinkSync(filePath);
+      console.log(`APK 已删除: ${safeName}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'APK 已删除',
+      });
+    } catch (error) {
+      console.error('APK 删除失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '删除失败',
+        error: (error as Error).message,
+      });
+    }
+  });
+
+  /**
+   * GET /api/apk/list
+   * 列出所有已上传的 APK 文件
+   */
+  app.get('/api/apk/list', (_req: any, res: any) => {
+    try {
+      ensureUploadDir();
+      const files = fs.readdirSync(APK_STORAGE_DIR)
+        .filter((f: string) => f.endsWith('.apk'))
+        .map((f: string) => {
+          const stat = fs.statSync(path.join(APK_STORAGE_DIR, f));
+          return {
+            fileName: f,
+            fileSize: stat.size,
+            fileSizeFormatted: formatFileSize(stat.size),
+            downloadUrl: `/api/apk/download/${f}`,
+            uploadedAt: stat.mtime.toISOString(),
+          };
+        })
+        .sort((a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+
+      res.status(200).json({
+        success: true,
+        data: { files, total: files.length },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: '获取文件列表失败',
+        error: (error as Error).message,
+      });
+    }
+  });
+}

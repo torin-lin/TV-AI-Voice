@@ -1,224 +1,110 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { CustomerProblem } from '../../../types/database';
-import { getDatabase } from '../../../db';
+import {
+  apiQueryProblems,
+  apiCreateProblem,
+  apiUpdateProblem,
+  apiDeleteProblem,
+  ProblemQueryParams,
+} from '../../../services/CustomerProblemApiClient';
 
 /**
- * 客户问题追踪 Redux 状态管理
+ * 客户问题/QA问题 Redux 状态管理
+ * 使用服务端 API 存储，支持多人共享
  */
 
 interface CustomerProblemsState {
-  items: CustomerProblem[];
+  /** 客户问题列表 */
+  customerItems: CustomerProblem[];
+  /** QA问题列表 */
+  qaItems: CustomerProblem[];
   loading: boolean;
   error: string | null;
   filters: {
     keyword?: string;
     classification?: string;
     status?: string;
-    startDate?: number;
-    endDate?: number;
   };
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-  };
-  sorting: {
-    field: string;
-    order: 'asc' | 'desc';
-  };
+  customerPagination: { page: number; pageSize: number; total: number };
+  qaPagination: { page: number; pageSize: number; total: number };
+  sorting: { field: string; order: 'asc' | 'desc' };
 }
 
 const initialState: CustomerProblemsState = {
-  items: [],
+  customerItems: [],
+  qaItems: [],
   loading: false,
   error: null,
   filters: {},
-  pagination: {
-    page: 1,
-    pageSize: 10,
-    total: 0,
-  },
-  sorting: {
-    field: 'createdAt',
-    order: 'desc',
-  },
+  customerPagination: { page: 1, pageSize: 10, total: 0 },
+  qaPagination: { page: 1, pageSize: 10, total: 0 },
+  sorting: { field: 'createdAt', order: 'desc' },
 };
 
-/**
- * 获取客户问题列表
- */
+/** 获取客户问题列表 */
 export const fetchCustomerProblems = createAsyncThunk(
   'customerProblems/fetchCustomerProblems',
-  async (
-    params: {
-      filters: Record<string, any>;
-      pagination: { page: number; pageSize: number };
-      sorting: { field: string; order: 'asc' | 'desc' };
-    },
-    { rejectWithValue }
-  ) => {
+  async (params: ProblemQueryParams, { rejectWithValue }) => {
     try {
-      const { filters, pagination, sorting } = params;
-      const { page, pageSize } = pagination;
-
-      // 构建查询条件
-      let query = getDatabase().customerProblems.toCollection();
-
-      // 应用筛选条件
-      if (filters.keyword) {
-        query = query.filter(
-          (item) =>
-            item.description.includes(filters.keyword) ||
-            item.classification?.includes(filters.keyword)
-        );
-      }
-
-      if (filters.classification !== undefined && filters.classification !== null) {
-        query = query.filter((item) => item.classification === filters.classification);
-      }
-
-      if (filters.status !== undefined && filters.status !== null) {
-        query = query.filter((item) => item.status === filters.status);
-      }
-
-      if (filters.startDate !== undefined && filters.startDate !== null) {
-        query = query.filter((item) => item.createdAt >= filters.startDate);
-      }
-
-      if (filters.endDate !== undefined && filters.endDate !== null) {
-        query = query.filter((item) => item.createdAt <= filters.endDate);
-      }
-
-      // 获取总数
-      const total = await query.count();
-
-      // 应用排序
-      let sorted = await query.toArray();
-      sorted.sort((a, b) => {
-        const aVal = a[sorting.field as keyof CustomerProblem] as any;
-        const bVal = b[sorting.field as keyof CustomerProblem] as any;
-
-        if (aVal && bVal) {
-          if (aVal < bVal) return sorting.order === 'asc' ? -1 : 1;
-          if (aVal > bVal) return sorting.order === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-
-      // 应用分页
-      const items = sorted.slice((page - 1) * pageSize, page * pageSize);
-
-      return { items, total };
+      return await apiQueryProblems({ ...params, problemType: 'customer' });
     } catch (error) {
       return rejectWithValue((error as Error).message);
     }
   }
 );
 
-/**
- * 创建客户问题
- */
-export const createCustomerProblem = createAsyncThunk(
-  'customerProblems/createCustomerProblem',
+/** 获取QA问题列表 */
+export const fetchQaProblems = createAsyncThunk(
+  'customerProblems/fetchQaProblems',
+  async (params: ProblemQueryParams, { rejectWithValue }) => {
+    try {
+      return await apiQueryProblems({ ...params, problemType: 'qa' });
+    } catch (error) {
+      return rejectWithValue((error as Error).message);
+    }
+  }
+);
+
+/** 创建问题（客户或QA） */
+export const createProblem = createAsyncThunk(
+  'customerProblems/createProblem',
   async (data: Partial<CustomerProblem>, { rejectWithValue }) => {
     try {
+      const id = await apiCreateProblem(data);
       const now = Date.now();
-      const problem: CustomerProblem = {
-        id: `problem_${now}`,
-        description: data.description || '',
-        classification: data.classification,
-        confidence: data.confidence || 0,
-        status: data.status || '开放',
-        notes: data.notes,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await getDatabase().customerProblems.add(problem);
-      return problem;
+      return { ...data, id, createdAt: now, updatedAt: now } as CustomerProblem;
     } catch (error) {
       return rejectWithValue((error as Error).message);
     }
   }
 );
 
-/**
- * 更新客户问题
- */
-export const updateCustomerProblem = createAsyncThunk(
-  'customerProblems/updateCustomerProblem',
-  async (
-    params: { id: string; data: Partial<CustomerProblem> },
-    { rejectWithValue }
-  ) => {
+/** 更新问题 */
+export const updateProblem = createAsyncThunk(
+  'customerProblems/updateProblem',
+  async (params: { id: string; data: Partial<CustomerProblem> }, { rejectWithValue }) => {
     try {
-      const { id, data } = params;
-      const updated = {
-        ...data,
-        updatedAt: Date.now(),
-      };
-
-      await getDatabase().customerProblems.update(id, updated);
-
-      const problem = await getDatabase().customerProblems.get(id);
-      return problem;
+      await apiUpdateProblem(params.id, params.data);
+      return { id: params.id, ...params.data, updatedAt: Date.now() };
     } catch (error) {
       return rejectWithValue((error as Error).message);
     }
   }
 );
 
-/**
- * 删除客户问题
- */
-export const deleteCustomerProblem = createAsyncThunk(
-  'customerProblems/deleteCustomerProblem',
-  async (id: string, { rejectWithValue }) => {
+/** 删除问题 */
+export const deleteProblem = createAsyncThunk(
+  'customerProblems/deleteProblem',
+  async (params: { id: string; problemType: 'customer' | 'qa' }, { rejectWithValue }) => {
     try {
-      await getDatabase().customerProblems.delete(id);
-      return id;
+      await apiDeleteProblem(params.id);
+      return params;
     } catch (error) {
       return rejectWithValue((error as Error).message);
     }
   }
 );
 
-/**
- * 搜索客户问题
- */
-export const searchCustomerProblems = createAsyncThunk(
-  'customerProblems/searchCustomerProblems',
-  async (
-    params: {
-      keyword: string;
-      pagination: { page: number; pageSize: number };
-    },
-    { rejectWithValue }
-  ) => {
-    try {
-      const { keyword, pagination } = params;
-      const { page, pageSize } = pagination;
-
-      const allProblems = await getDatabase().customerProblems.toArray();
-      const filtered = allProblems.filter(
-        (item) =>
-          item.description.includes(keyword) ||
-          item.classification?.includes(keyword)
-      );
-
-      const total = filtered.length;
-      const items = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-      return { items, total };
-    } catch (error) {
-      return rejectWithValue((error as Error).message);
-    }
-  }
-);
-
-/**
- * Redux Slice
- */
 const customerProblemsSlice = createSlice({
   name: 'customerProblems',
   initialState,
@@ -226,123 +112,68 @@ const customerProblemsSlice = createSlice({
     setFilters: (state, action: PayloadAction<any>) => {
       state.filters = action.payload;
     },
-    setPagination: (
-      state,
-      action: PayloadAction<{ page: number; pageSize: number }>
-    ) => {
-      state.pagination = { ...state.pagination, ...action.payload };
+    setCustomerPagination: (state, action: PayloadAction<{ page: number; pageSize: number }>) => {
+      state.customerPagination = { ...state.customerPagination, ...action.payload };
     },
-    setSorting: (
-      state,
-      action: PayloadAction<{ field: string; order: 'asc' | 'desc' }>
-    ) => {
+    setQaPagination: (state, action: PayloadAction<{ page: number; pageSize: number }>) => {
+      state.qaPagination = { ...state.qaPagination, ...action.payload };
+    },
+    setSorting: (state, action: PayloadAction<{ field: string; order: 'asc' | 'desc' }>) => {
       state.sorting = action.payload;
     },
-    clearError: (state) => {
-      state.error = null;
-    },
+    clearError: (state) => { state.error = null; },
   },
   extraReducers: (builder) => {
-    // fetchCustomerProblems
     builder
-      .addCase(fetchCustomerProblems.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(fetchCustomerProblems.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchCustomerProblems.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload.items;
-        state.pagination.total = action.payload.total;
+        state.customerItems = action.payload.data;
+        state.customerPagination.total = action.payload.total;
       })
-      .addCase(fetchCustomerProblems.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
+      .addCase(fetchCustomerProblems.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
 
-    // createCustomerProblem
-    builder
-      .addCase(createCustomerProblem.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(createCustomerProblem.fulfilled, (state, action) => {
+      .addCase(fetchQaProblems.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchQaProblems.fulfilled, (state, action) => {
         state.loading = false;
-        state.items.unshift(action.payload);
-        state.pagination.total += 1;
+        state.qaItems = action.payload.data;
+        state.qaPagination.total = action.payload.total;
       })
-      .addCase(createCustomerProblem.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
+      .addCase(fetchQaProblems.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
 
-    // updateCustomerProblem
-    builder
-      .addCase(updateCustomerProblem.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(updateCustomerProblem.fulfilled, (state, action) => {
-        state.loading = false;
-        if (action.payload) {
-          const index = state.items.findIndex((item) => item.id === action.payload!.id);
-          if (index !== -1) {
-            state.items[index] = action.payload;
-          }
+      .addCase(createProblem.fulfilled, (state, action) => {
+        if (action.payload.problemType === 'customer') {
+          state.customerItems.unshift(action.payload);
+          state.customerPagination.total += 1;
+        } else {
+          state.qaItems.unshift(action.payload);
+          state.qaPagination.total += 1;
         }
       })
-      .addCase(updateCustomerProblem.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
+      .addCase(createProblem.rejected, (state, action) => { state.error = action.payload as string; })
 
-    // deleteCustomerProblem
-    builder
-      .addCase(deleteCustomerProblem.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+      .addCase(updateProblem.fulfilled, (state, action) => {
+        const { id } = action.payload;
+        const cIdx = state.customerItems.findIndex((i) => i.id === id);
+        if (cIdx !== -1) state.customerItems[cIdx] = { ...state.customerItems[cIdx], ...action.payload };
+        const qIdx = state.qaItems.findIndex((i) => i.id === id);
+        if (qIdx !== -1) state.qaItems[qIdx] = { ...state.qaItems[qIdx], ...action.payload };
       })
-      .addCase(deleteCustomerProblem.fulfilled, (state, action) => {
-        state.loading = false;
-        state.items = state.items.filter((item) => item.id !== action.payload);
-        state.pagination.total -= 1;
-      })
-      .addCase(deleteCustomerProblem.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
+      .addCase(updateProblem.rejected, (state, action) => { state.error = action.payload as string; })
 
-    // searchCustomerProblems
-    builder
-      .addCase(searchCustomerProblems.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+      .addCase(deleteProblem.fulfilled, (state, action) => {
+        const { id, problemType } = action.payload;
+        if (problemType === 'customer') {
+          state.customerItems = state.customerItems.filter((i) => i.id !== id);
+          state.customerPagination.total -= 1;
+        } else {
+          state.qaItems = state.qaItems.filter((i) => i.id !== id);
+          state.qaPagination.total -= 1;
+        }
       })
-      .addCase(searchCustomerProblems.fulfilled, (state, action) => {
-        state.loading = false;
-        state.items = action.payload.items;
-        state.pagination.total = action.payload.total;
-      })
-      .addCase(searchCustomerProblems.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
+      .addCase(deleteProblem.rejected, (state, action) => { state.error = action.payload as string; });
   },
 });
 
-export const { setFilters, setPagination, setSorting, clearError } =
-  customerProblemsSlice.actions;
-
-// Selectors
-export const selectCustomerProblems = (state: any) => state.customerProblems.items;
-export const selectCustomerProblemsLoading = (state: any) =>
-  state.customerProblems.loading;
-export const selectCustomerProblemsError = (state: any) =>
-  state.customerProblems.error;
-export const selectCustomerProblemsFilters = (state: any) =>
-  state.customerProblems.filters;
-export const selectCustomerProblemsPagination = (state: any) =>
-  state.customerProblems.pagination;
-export const selectCustomerProblemsSorting = (state: any) =>
-  state.customerProblems.sorting;
-
+export const { setFilters, setCustomerPagination, setQaPagination, setSorting, clearError } = customerProblemsSlice.actions;
 export default customerProblemsSlice.reducer;
