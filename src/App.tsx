@@ -9,12 +9,15 @@ import RecommendationsPage from './features/recommendations/components/Recommend
 import VoiceRecordsPage from './pages/VoiceRecordsPage';
 import SettingsPage from './pages/SettingsPage';
 import AliasTestPage from './pages/AliasTestPage';
+import { useI18n } from './i18n/I18nProvider';
 
 /**
  * 主应用组件
  */
 const App: React.FC = () => {
-  return (
+  const { localizeNode } = useI18n();
+
+  return localizeNode(
     <Router>
       <MainLayout>
         <Routes>

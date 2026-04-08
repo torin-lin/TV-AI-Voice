@@ -1,5 +1,6 @@
 import React from 'react';
 import { KBRecommendation } from '../../../types/database';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 interface Props {
   recommendation: KBRecommendation;
@@ -8,6 +9,8 @@ interface Props {
 const SCORE_COLOR = (s: number) => s >= 20 ? 'bg-red-100 text-red-700' : s >= 10 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600';
 
 const RecommendationResult: React.FC<Props> = ({ recommendation: rec }) => {
+  const { formatDateTime } = useI18n();
+
   return (
     <div className="space-y-4">
       {/* 测试计划摘要 */}
@@ -74,7 +77,7 @@ const RecommendationResult: React.FC<Props> = ({ recommendation: rec }) => {
       )}
 
       <div className="text-xs text-gray-400 text-right">
-        生成时间: {new Date(rec.createdAt).toLocaleString('zh-CN')}
+        生成时间: {formatDateTime(rec.createdAt)}
       </div>
     </div>
   );

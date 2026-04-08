@@ -14,6 +14,7 @@ import VersionRecordFilters from './VersionRecordFilters';
 import VersionRecordModal from './VersionRecordModal';
 import { Button } from '../../../components/common/Button';
 import { exportToExcel, exportToCSV } from '../services/VersionRecordsExportService';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 /**
  * 版本测试记录页面
@@ -21,6 +22,7 @@ import { exportToExcel, exportToCSV } from '../services/VersionRecordsExportServ
  */
 const VersionRecordsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const { t } = useI18n();
   const {
     items,
     loading,
@@ -64,7 +66,7 @@ const VersionRecordsPage: React.FC = () => {
 
   // 处理删除记录
   const handleDeleteRecord = (id: string) => {
-    if (window.confirm('确定要删除这条记录吗？')) {
+    if (window.confirm(t('确定要删除这条记录吗？'))) {
       dispatch(deleteVersionRecord(id));
     }
   };

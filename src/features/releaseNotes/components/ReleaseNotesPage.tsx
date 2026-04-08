@@ -14,6 +14,7 @@ import ReleaseNoteFilters from './ReleaseNoteFilters';
 import ReleaseNoteModal from './ReleaseNoteModal';
 import { Button } from '../../../components/common/Button';
 import { exportToExcel, exportToCSV } from '../services/ReleaseNotesExportService';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 /**
  * Release Note 页面
@@ -21,6 +22,7 @@ import { exportToExcel, exportToCSV } from '../services/ReleaseNotesExportServic
  */
 const ReleaseNotesPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const { t } = useI18n();
   const {
     items,
     loading,
@@ -68,7 +70,7 @@ const ReleaseNotesPage: React.FC = () => {
 
   // 处理删除记录
   const handleDeleteRecord = (id: string) => {
-    if (window.confirm('确定要删除这条 Release Note 吗？')) {
+    if (window.confirm(t('确定要删除这条 Release Note 吗？'))) {
       dispatch(deleteReleaseNote(id));
     }
   };

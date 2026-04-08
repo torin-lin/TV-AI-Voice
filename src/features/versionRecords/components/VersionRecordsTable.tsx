@@ -8,6 +8,7 @@ import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { getDocDownloadUrl } from '../../../services/DocUploadService';
 import { formatFileSize } from '../../../services/ApkUploadService';
 import VersionIssueList from './VersionIssueList';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
@@ -36,6 +37,7 @@ const getStatusColor = (s: string) => {
 const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
   records, loading, pagination, sorting, onEdit, onDelete, onPaginationChange, onSortingChange,
 }) => {
+  const { formatDateTime } = useI18n();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const showProjectCol = currentProject === '全部';
@@ -125,7 +127,7 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(summarizeResult('smokeTestResult'))}>{summarizeResult('smokeTestResult')}</Tag></td>
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(summarizeResult('voiceRegressionResult'))}>{summarizeResult('voiceRegressionResult')}</Tag></td>
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(summarizeResult('systemRegressionResult'))}>{summarizeResult('systemRegressionResult')}</Tag></td>
-                    <td className="px-3 py-3 text-sm text-gray-600">{latestRecord?.createdAt ? new Date(latestRecord.createdAt).toLocaleString('zh-CN') : '-'}</td>
+                    <td className="px-3 py-3 text-sm text-gray-600">{latestRecord?.createdAt ? formatDateTime(latestRecord.createdAt) : '-'}</td>
                     <td className="px-3 py-3 text-sm text-gray-500">{group.records.length > 1 ? '同版本多固件' : '单记录'}</td>
                   </tr>
                   {isExpanded && (
@@ -140,7 +142,7 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
                                     <span>固件: {r.firmwareVersion || '-'}</span>
                                     <span>测试周期: {r.testCycle || '-'}</span>
-                                    <span>创建时间: {new Date(r.createdAt).toLocaleString('zh-CN')}</span>
+                                    <span>创建时间: {formatDateTime(r.createdAt)}</span>
                                   </div>
                                 </div>
                                 <div className="flex gap-1">

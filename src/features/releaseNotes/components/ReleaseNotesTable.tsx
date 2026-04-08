@@ -6,6 +6,7 @@ import { Button } from '../../../components/common/Button';
 import { Tag } from '../../../components/common/Tag';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { getApkDownloadUrl, formatFileSize } from '../../../services/ApkUploadService';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 const ZMIND_PR_URL = 'https://zmind.whaletv.com/issues/';
 const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
@@ -50,6 +51,7 @@ const getRiskColor = (r?: string) => {
 const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
   records, loading, pagination, sorting, onEdit, onDelete, onPaginationChange, onSortingChange, onAddChild,
 }) => {
+  const { formatDateTime } = useI18n();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [expandedChildIds, setExpandedChildIds] = useState<Set<string>>(new Set());
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
@@ -131,7 +133,7 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                     <td className="px-3 py-3 text-sm text-gray-600 max-w-xs truncate" title={r.changeDescription}>{r.changeDescription}</td>
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getChangeTypeColor(r.changeType)}>{r.changeType}</Tag></td>
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getSeverityColor(r.severity)}>{r.severity}</Tag></td>
-                    <td className="px-3 py-3 text-sm text-gray-600">{new Date(r.createdAt).toLocaleString('zh-CN')}</td>
+                    <td className="px-3 py-3 text-sm text-gray-600">{formatDateTime(r.createdAt)}</td>
                     <td className="px-3 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-1">
                         <Button onClick={() => onEdit(r)} variant="secondary" size="sm">编辑</Button>
@@ -228,7 +230,7 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                               <td className="px-3 py-2 text-sm text-gray-600 max-w-xs truncate" title={child.changeDescription}>{child.changeDescription}</td>
                               <td className="px-3 py-2 text-sm"><Tag variant="primary" className={getChangeTypeColor(child.changeType)}>{child.changeType}</Tag></td>
                               <td className="px-3 py-2 text-sm"><Tag variant="primary" className={getSeverityColor(child.severity)}>{child.severity}</Tag></td>
-                              <td className="px-3 py-2 text-sm text-gray-600">{new Date(child.createdAt).toLocaleString('zh-CN')}</td>
+                              <td className="px-3 py-2 text-sm text-gray-600">{formatDateTime(child.createdAt)}</td>
                               <td className="px-3 py-2 text-sm" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex gap-1">
                                   <Button onClick={() => onEdit(child)} variant="secondary" size="sm">编辑</Button>

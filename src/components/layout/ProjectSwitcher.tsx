@@ -2,6 +2,7 @@ import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store';
 import { setCurrentProject, ProjectType } from '../../store/projectSlice';
+import { useI18n } from '../../i18n/I18nProvider';
 
 /**
  * 项目组切换器组件
@@ -10,6 +11,7 @@ import { setCurrentProject, ProjectType } from '../../store/projectSlice';
 const ProjectSwitcher: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const { t } = useI18n();
 
   const projects: ProjectType[] = ['全部', 'TV AI Voice', 'Projector AI Voice', 'STB AI Voice'];
 
@@ -19,7 +21,7 @@ const ProjectSwitcher: React.FC = () => {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-700">项目组:</span>
+      <span className="text-sm font-medium text-gray-700">{t('项目组:')}</span>
       <select
         value={currentProject}
         onChange={(e) => handleProjectChange(e.target.value as ProjectType)}
@@ -27,7 +29,7 @@ const ProjectSwitcher: React.FC = () => {
       >
         {projects.map((project) => (
           <option key={project} value={project}>
-            {project}
+            {t(project)}
           </option>
         ))}
       </select>

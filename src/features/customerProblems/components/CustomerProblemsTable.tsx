@@ -5,6 +5,7 @@ import { CustomerProblem } from '../../../types/database';
 import { Button } from '../../../components/common/Button';
 import { Tag } from '../../../components/common/Tag';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
@@ -38,6 +39,7 @@ const getStatusColor = (s: string) => {
 const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
   problems, loading, pagination, onEdit, onDelete, onPaginationChange, qaItems, onViewTimeline,
 }) => {
+  const { formatDateTime } = useI18n();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
@@ -131,8 +133,8 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(p.status)}>{p.status}</Tag></td>
                     <td className="px-3 py-3 text-sm text-gray-600">
                       {p.issueCreatedAt
-                        ? new Date(p.issueCreatedAt).toLocaleString('zh-CN')
-                        : new Date(p.createdAt).toLocaleString('zh-CN')}
+                        ? formatDateTime(p.issueCreatedAt)
+                        : formatDateTime(p.createdAt)}
                       {p.issueCreatedAt && <span className="ml-1 text-xs text-cyan-600" title="来自 zmind PR 创建时间">PR</span>}
                     </td>
                     <td className="px-2 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
@@ -165,8 +167,8 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
                             <span className="text-gray-500">问题时间（追责依据）：</span>
                             <p className="text-gray-900 mt-1">
                               {p.issueCreatedAt
-                                ? `${new Date(p.issueCreatedAt).toLocaleString('zh-CN')}（PR创建时间）`
-                                : `${new Date(p.createdAt).toLocaleString('zh-CN')}（提交时间）`}
+                                ? `${formatDateTime(p.issueCreatedAt)}（PR创建时间）`
+                                : `${formatDateTime(p.createdAt)}（提交时间）`}
                             </p>
                           </div>
                           {isCustomer && (

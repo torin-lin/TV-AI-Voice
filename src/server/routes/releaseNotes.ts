@@ -75,7 +75,7 @@ export function setupReleaseNoteRoutes(app: any): void {
       // 按大版本号分组子版本
       const childMap = new Map<string, any[]>();
       for (const c of childRecords) {
-        const pv = c.parentVersion;
+        const pv = String(c.parentVersion);
         if (!childMap.has(pv)) childMap.set(pv, []);
         childMap.get(pv)!.push(c);
       }

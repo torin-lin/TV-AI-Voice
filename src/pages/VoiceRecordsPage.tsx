@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Card } from '../components/common/Card';
+import { useI18n } from '../i18n/I18nProvider';
 
 /**
  * 语音记录页面
  * 管理语音识别记录
  */
 const VoiceRecordsPage: React.FC = () => {
+  const { formatDateTime } = useI18n();
   const [records, setRecords] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     originalText: '',
@@ -23,7 +25,7 @@ const VoiceRecordsPage: React.FC = () => {
           id: `voice_${Date.now()}`,
           ...formData,
           isCorrect,
-          createdAt: new Date().toLocaleString('zh-CN'),
+          createdAt: formatDateTime(new Date()),
         },
         ...records,
       ]);

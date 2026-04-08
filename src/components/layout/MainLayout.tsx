@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import { Button } from '../common/Button';
 import ProjectSwitcher from './ProjectSwitcher';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const { language, setLanguage, t } = useI18n();
   const sidebarTitle = currentProject === '全部' ? 'AI Voice' : currentProject;
 
   // 导航菜单项
@@ -90,10 +92,24 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <div className="flex items-center gap-6">
             <ProjectSwitcher />
             <h1 className="text-2xl font-bold text-gray-900">
-              {menuItems.find((item) => isActive(item.path))?.label || 'TV AI Voice'}
+              {t(menuItems.find((item) => isActive(item.path))?.label || 'TV AI Voice')}
             </h1>
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 p-1 text-sm">
+              <button
+                onClick={() => setLanguage('zh-CN')}
+                className={`rounded px-3 py-1 ${language === 'zh-CN' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}`}
+              >
+                中文
+              </button>
+              <button
+                onClick={() => setLanguage('en-US')}
+                className={`rounded px-3 py-1 ${language === 'en-US' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'}`}
+              >
+                EN
+              </button>
+            </div>
             <Button variant="secondary" size="sm">
               帮助
             </Button>

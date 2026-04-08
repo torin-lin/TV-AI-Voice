@@ -7,6 +7,7 @@ import { Select } from '../../../components/common/Select';
 import { Textarea } from '../../../components/common/Textarea';
 import { Input } from '../../../components/common/Input';
 import { fetchFirmwareVersion } from '../../../services/ZmindApiService';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 const CLASSIFICATIONS = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络', 'Android'];
@@ -28,6 +29,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
   onCancel,
   loading = false,
 }) => {
+  const { formatDateTime } = useI18n();
   const qaItems = useSelector((state: RootState) => state.customerProblems.qaItems);
 
   const [formData, setFormData] = useState<Partial<CustomerProblem>>({
@@ -158,7 +160,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
         <Input
           type="text"
           name="issueCreatedAt"
-          value={formData.issueCreatedAt ? new Date(formData.issueCreatedAt).toLocaleString('zh-CN') : ''}
+          value={formData.issueCreatedAt ? formatDateTime(formData.issueCreatedAt) : ''}
           onChange={() => {}}
           placeholder="同步 PR 后自动获取，无 PR 则以提交时间为准"
           disabled

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Card } from '../components/common/Card';
+import { useI18n } from '../i18n/I18nProvider';
 
 const SettingsPage: React.FC = () => {
+  const { t } = useI18n();
   const [apiKey, setApiKey] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [modelName, setModelName] = useState('');
@@ -20,15 +22,15 @@ const SettingsPage: React.FC = () => {
     localStorage.setItem('azure_openai_api_key', apiKey);
     localStorage.setItem('azure_openai_endpoint', endpoint);
     localStorage.setItem('azure_openai_model', modelName);
-    alert('设置已保存');
+    alert(t('设置已保存'));
   };
 
   const handleTest = async () => {
     setTestLoading(true);
     setTestResult(null);
     try {
-      if (!apiKey) { setTestResult('❌ 请先输入 API Key'); return; }
-      if (!endpoint) { setTestResult('❌ 请先输入端点地址'); return; }
+      if (!apiKey) { setTestResult(`❌ ${t('请先输入 API Key')}`); return; }
+      if (!endpoint) { setTestResult(`❌ ${t('请先输入端点地址')}`); return; }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -45,13 +47,13 @@ const SettingsPage: React.FC = () => {
       if (response.ok) {
         const model = data?.model || '';
         const reply = data?.choices?.[0]?.message?.content || '';
-        setTestResult(`✅ 连接成功${model ? ` (模型: ${model})` : ''}${reply ? `\n回复: ${reply}` : ''}`);
+        setTestResult(`✅ ${t('连接成功')}${model ? ` (${t('模型:')} ${model})` : ''}${reply ? `\n${t('回复:')} ${reply}` : ''}`);
       } else {
         const msg = data?.error?.message || response.statusText;
-        setTestResult(`❌ 连接失败 (${response.status}): ${msg}`);
+        setTestResult(`❌ ${t('连接失败')} (${response.status}): ${msg}`);
       }
     } catch (error) {
-      setTestResult(`❌ 网络错误: ${(error as Error).message}`);
+      setTestResult(`❌ ${t('网络错误')}: ${(error as Error).message}`);
     } finally {
       setTestLoading(false);
     }

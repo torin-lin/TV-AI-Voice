@@ -15,6 +15,7 @@ import CustomerProblemFilters from './CustomerProblemFilters';
 import CustomerProblemModal from './CustomerProblemModal';
 import { Button } from '../../../components/common/Button';
 import { exportToExcel } from '../services/CustomerProblemsExportService';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 
@@ -25,6 +26,7 @@ const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
  */
 const CustomerProblemsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const { formatDateTime, t } = useI18n();
   const {
     customerItems, qaItems, loading, error, filters,
     customerPagination, qaPagination,
@@ -62,7 +64,7 @@ const CustomerProblemsPage: React.FC = () => {
   };
 
   const handleDelete = (id: string, type: 'customer' | 'qa') => {
-    if (window.confirm('确定要删除这条记录吗？')) {
+    if (window.confirm(t('确定要删除这条记录吗？'))) {
       dispatch(deleteProblem({ id, problemType: type }));
     }
   };
@@ -159,8 +161,8 @@ const CustomerProblemsPage: React.FC = () => {
                     return item.createdAt;
                   };
                   const formatTime = (item: any) => {
-                    if (item.issueCreatedAt) return new Date(item.issueCreatedAt).toLocaleString('zh-CN');
-                    return new Date(item.createdAt).toLocaleString('zh-CN');
+                    if (item.issueCreatedAt) return formatDateTime(item.issueCreatedAt);
+                    return formatDateTime(item.createdAt);
                   };
                   const nodes: { type: string; item: any; time: number; color: string }[] = [];
                   nodes.push({ type: '客户问题', item: timelineTarget, time: getTime(timelineTarget), color: 'bg-blue-500' });

@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VersionIssue, IssueAttachment } from '../../../types/database';
 import { fetchVersionIssues, createVersionIssue, updateVersionIssue, deleteVersionIssue, uploadIssueAttachment, deleteIssueAttachment, getAttachmentUrl } from '../../../services/VersionIssueApiClient';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 const ZMIND_BASE = 'https://zmind.whaletv.com/issues/';
 const SEV_CLS: Record<string, string> = { '低': 'bg-green-100 text-green-800', '中': 'bg-yellow-100 text-yellow-800', '高': 'bg-red-100 text-red-800', '紧急': 'bg-red-200 text-red-900' };
@@ -62,6 +63,7 @@ const CreateForm: React.FC<{ form: any; setForm: (f: any) => void; onCreate: () 
 
 /** 单条问题卡片 - 支持编辑、前提条件/测试环境显示、同步指示器 */
 const IssueCard: React.FC<{ issue: VersionIssue; onRefresh: () => void }> = ({ issue, onRefresh }) => {
+  const { formatDateTime, t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     title: issue.title, description: issue.description || '', precondition: issue.precondition || '',
@@ -76,7 +78,7 @@ const IssueCard: React.FC<{ issue: VersionIssue; onRefresh: () => void }> = ({ i
   const atts = issue.attachments || [];
 
   const onStatus = async (s: string) => { await updateVersionIssue(issue.id!, { status: s as any }); onRefresh(); };
-  const onDel = async () => { if (!confirm('确定删除此问题？')) return; await deleteVersionIssue(issue.id!); onRefresh(); };
+  const onDel = async () => { if (!confirm(t('确定删除这条记录吗？'))) return; await deleteVersionIssue(issue.id!); onRefresh(); };
   const onSaveEdit = async () => {
     await updateVersionIssue(issue.id!, editForm as any); setEditing(false); onRefresh();
   };
@@ -85,12 +87,12 @@ const IssueCard: React.FC<{ issue: VersionIssue; onRefresh: () => void }> = ({ i
     const files = e.target.files; if (!files?.length) return;
     setUploading(true);
     try { for (let i = 0; i < files.length; i++) { setProgress(0); await uploadIssueAttachment(issue.id!, files[i], setProgress); } onRefresh(); }
-    catch (err) { alert('上传失败: ' + (err as Error).message); }
+    catch (err) { alert(`${t('失败')}: ${(err as Error).message}`); }
     setUploading(false); if (fileRef.current) fileRef.current.value = '';
   };
   const doDelAtt = async (a: IssueAttachment) => {
     if (!confirm(`确定删除附件 "${a.fileName}"？`)) return;
-    try { await deleteIssueAttachment(issue.id!, a.savedFileName); onRefresh(); } catch (err) { alert('删除失败: ' + (err as Error).message); }
+    try { await deleteIssueAttachment(issue.id!, a.savedFileName); onRefresh(); } catch (err) { alert(`${t('删除')} ${t('失败')}: ${(err as Error).message}`); }
   };
 
   return (
@@ -110,7 +112,7 @@ const IssueCard: React.FC<{ issue: VersionIssue; onRefresh: () => void }> = ({ i
           {issue.testEnvironment && <p className="text-xs text-gray-500 mt-0.5">🖥️ 测试环境: {issue.testEnvironment}</p>}
           <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
             <span>提交人: {issue.reporter}</span>{issue.assignee && <span>处理人: {issue.assignee}</span>}
-            <span>{new Date(issue.createdAt).toLocaleString('zh-CN')}</span>
+            <span>{formatDateTime(issue.createdAt)}</span>
           </div>
           {issue.resolution && !resEditing && <div className="mt-1.5 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs text-green-800">💡 解决备注: {issue.resolution}</div>}
         </div>

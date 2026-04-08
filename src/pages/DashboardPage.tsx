@@ -7,9 +7,11 @@ import { PieChart } from '../components/common/Charts';
 import { apiQueryReleaseNotes } from '../services/ReleaseNoteApiClient';
 import { apiQueryProblems } from '../services/CustomerProblemApiClient';
 import { fetchVersionRecords } from '../features/versionRecords/store/versionRecordsSlice';
+import { useI18n } from '../i18n/I18nProvider';
 
 const DashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const { formatDate } = useI18n();
   const versionRecords = useSelector((state: RootState) => state.versionRecords.items);
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
 
@@ -74,7 +76,7 @@ const DashboardPage: React.FC = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">仪表板</h1>
           <p className="text-gray-600 mt-2">
-            {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+            {formatDate(new Date(), { year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
 
@@ -184,6 +186,7 @@ const DashboardPage: React.FC = () => {
                   <div className="flex-1 min-w-0 mr-3">
                     <p className="font-semibold text-gray-900 truncate" title={problem.description}>{problem.description}</p>
                     <p className="text-sm text-gray-600 truncate">{problem.classification || '未分类'}</p>
+                    
                   </div>
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${
                     problem.status === '开放' ? 'bg-red-100 text-red-800'
