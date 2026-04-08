@@ -166,7 +166,13 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                                     <span>创建时间: {formatDateTime(r.createdAt)}</span>
                                   </div>
                                 </div>
-                                <div className="flex gap-1">
+                                <div className="flex gap-1 flex-wrap justify-end">
+                                  <Link to={`/release-notes?keyword=${encodeURIComponent(r.versionNumber)}`}>
+                                    <Button variant="secondary" size="sm">查看 RD</Button>
+                                  </Link>
+                                  <Link to={`/customer-problems?keyword=${encodeURIComponent((r.linkedIssues && r.linkedIssues[0]) || r.firmwareVersion || r.versionNumber)}`}>
+                                    <Button variant="secondary" size="sm">查看问题</Button>
+                                  </Link>
                                   <Button onClick={() => onEdit(r)} variant="secondary" size="sm">编辑</Button>
                                   <Button onClick={() => onDelete(r.id!)} variant="danger" size="sm">删除</Button>
                                 </div>
@@ -241,6 +247,12 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                                   <span className="text-gray-500">备注：</span>
                                   <p className="text-gray-900 mt-1 whitespace-pre-wrap break-words">{r.notes || '-'}</p>
                                 </div>
+                                {r.qaEarlyInterventionReason && (
+                                  <div className="col-span-2 min-w-0">
+                                    <span className="text-gray-500">提前介入原因：</span>
+                                    <p className="text-gray-900 mt-1 whitespace-pre-wrap break-words">{r.qaEarlyInterventionReason}</p>
+                                  </div>
+                                )}
                               </div>
                               <div className="mt-4">
                                 <VersionIssueList versionRecordId={r.id!} versionNumber={r.versionNumber} />

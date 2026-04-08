@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import { AppDispatch, RootState } from '../../../store';
 import {
   fetchCustomerProblems,
@@ -27,6 +28,7 @@ const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 const CustomerProblemsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { formatDateTime, t } = useI18n();
+  const [searchParams] = useSearchParams();
   const {
     customerItems, qaItems, loading, error, filters,
     customerPagination, qaPagination,
@@ -37,8 +39,17 @@ const CustomerProblemsPage: React.FC = () => {
   const [modalType, setModalType] = useState<'customer' | 'qa'>('customer');
   const [editingProblem, setEditingProblem] = useState<CustomerProblem | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<CustomerProblem | null>(null);
+  const keywordFromUrl = searchParams.get('keyword') || undefined;
 
   // 加载数据
+  useEffect(() => {
+    if (keywordFromUrl && filters.keyword !== keywordFromUrl) {
+      dispatch(setFilters({ ...filters, keyword: keywordFromUrl }));
+      dispatch(setCustomerPagination({ page: 1, pageSize: customerPagination.pageSize }));
+      dispatch(setQaPagination({ page: 1, pageSize: qaPagination.pageSize }));
+    }
+  }, [customerPagination.pageSize, dispatch, filters, keywordFromUrl, qaPagination.pageSize]);
+
   useEffect(() => {
     const params = {
       ...filters,

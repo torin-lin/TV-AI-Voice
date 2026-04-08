@@ -62,6 +62,7 @@ export function initSqlite(): void {
   db.exec(`CREATE TABLE IF NOT EXISTS version_records (
     id TEXT PRIMARY KEY,
     releaseNoteId TEXT,
+    qaEarlyInterventionReason TEXT,
     versionNumber TEXT NOT NULL,
     parentVersion TEXT DEFAULT '',
     firmwareVersion TEXT,
@@ -185,6 +186,7 @@ export function initSqlite(): void {
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN fixedPRs TEXT DEFAULT '[]'`); } catch { /* 列已存在 */ }
   // version_records 新增 parentVersion 和测试结果附件列
   try { db.exec(`ALTER TABLE version_records ADD COLUMN releaseNoteId TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN qaEarlyInterventionReason TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN parentVersion TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFileName TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFilePath TEXT`); } catch { /* 列已存在 */ }

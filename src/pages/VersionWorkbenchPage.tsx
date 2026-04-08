@@ -233,6 +233,7 @@ const VersionWorkbenchPage: React.FC = () => {
     const passedCount = releaseNotes.filter((note) => note.rdSmokeStatus === '通过').length;
     const failedCount = releaseNotes.filter((note) => note.rdSmokeStatus === '失败').length;
     const pendingCount = releaseNotes.filter((note) => !note.rdSmokeStatus || note.rdSmokeStatus === '未测试').length;
+    const urgentOverrideCount = releaseNotes.filter((note) => note.severity === '紧急' && note.rdSmokeStatus !== '通过').length;
     const latestUpdatedAt = [...releaseNotes].sort((a, b) => b.updatedAt - a.updatedAt)[0]?.updatedAt;
 
     return {
@@ -240,6 +241,7 @@ const VersionWorkbenchPage: React.FC = () => {
       passedCount,
       failedCount,
       pendingCount,
+      urgentOverrideCount,
       latestUpdatedAt,
     };
   }, [releaseNotes]);
@@ -257,6 +259,9 @@ const VersionWorkbenchPage: React.FC = () => {
     if (summary.unresolvedProblems > 0) {
       messages.push(`还有 ${summary.unresolvedProblems} 个追踪问题未解决，建议保持阻塞或测试中状态。`);
     }
+    if (rdSummary.urgentOverrideCount > 0) {
+      messages.push(`存在 ${rdSummary.urgentOverrideCount} 个紧急版本由 QA 提前介入，建议同步记录介入原因和当前风险。`);
+    }
     if ((conclusionDraft.versionStatus === '可发布' || conclusionDraft.versionStatus === '已发布') && !conclusionDraft.conclusionSummary.trim()) {
       messages.push('进入可发布或已发布前，建议补充结论摘要。');
     }
@@ -268,11 +273,14 @@ const VersionWorkbenchPage: React.FC = () => {
     }
 
     return messages;
-  }, [conclusionDraft.conclusionOwner, conclusionDraft.conclusionSummary, conclusionDraft.releaseDecision, conclusionDraft.versionStatus, summary.openIssueCount, summary.unresolvedProblems]);
+  }, [conclusionDraft.conclusionOwner, conclusionDraft.conclusionSummary, conclusionDraft.releaseDecision, conclusionDraft.versionStatus, rdSummary.urgentOverrideCount, summary.openIssueCount, summary.unresolvedProblems]);
 
   const releaseChecklist = useMemo(() => {
     const hasReleaseNotes = releaseNotes.length > 0;
-    const rdSmokeAllPassed = hasReleaseNotes && rdSummary.failedCount === 0 && rdSummary.pendingCount === 0;
+    const rdQaGateSatisfied =
+      hasReleaseNotes &&
+      (rdSummary.failedCount === 0 || rdSummary.urgentOverrideCount > 0) &&
+      (rdSummary.pendingCount === 0 || rdSummary.urgentOverrideCount > 0);
     const hasQaRecords = versionRecords.length > 0;
     const regressionStarted = versionRecords.some(
       (record) => record.voiceRegressionResult !== '未测试' || record.systemRegressionResult !== '未测试'
@@ -291,10 +299,12 @@ const VersionWorkbenchPage: React.FC = () => {
       },
       {
         key: 'rd-smoke',
-        label: 'RD 冒烟已补齐且通过',
-        passed: rdSmokeAllPassed,
-        detail: rdSmokeAllPassed
-          ? '所有关联 Release Note 的 RD 冒烟都已通过'
+        label: 'RD 准入条件已满足',
+        passed: rdQaGateSatisfied,
+        detail: rdQaGateSatisfied
+          ? (rdSummary.urgentOverrideCount > 0
+            ? `存在 ${rdSummary.urgentOverrideCount} 个紧急版本走 QA 提前介入，其余 RD 冒烟已补齐`
+            : '所有关联 Release Note 的 RD 冒烟都已通过')
           : `通过 ${rdSummary.passedCount} / 失败 ${rdSummary.failedCount} / 未补齐 ${rdSummary.pendingCount}`,
       },
       {
@@ -340,6 +350,7 @@ const VersionWorkbenchPage: React.FC = () => {
     rdSummary.failedCount,
     rdSummary.passedCount,
     rdSummary.pendingCount,
+    rdSummary.urgentOverrideCount,
     releaseNotes.length,
     summary.openIssueCount,
     summary.unresolvedProblems,
@@ -582,6 +593,12 @@ const VersionWorkbenchPage: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-3">
+            <Link to={`/release-notes?keyword=${encodeURIComponent(versionKey)}`}>
+              <Button variant="secondary">查看 RD</Button>
+            </Link>
+            <Link to={`/customer-problems?keyword=${encodeURIComponent((latestRecord?.linkedIssues && latestRecord.linkedIssues[0]) || latestRecord?.firmwareVersion || versionKey)}`}>
+              <Button variant="secondary">查看问题</Button>
+            </Link>
             <Link to="/version-records">
               <Button variant="secondary">返回版本记录</Button>
             </Link>
@@ -633,6 +650,12 @@ const VersionWorkbenchPage: React.FC = () => {
                     </div>
                   </div>
                   <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap break-words">{record.changeDescription}</p>
+                  {record.qaEarlyInterventionReason && (
+                    <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
+                      <p className="text-xs font-semibold text-red-700">提前介入原因</p>
+                      <p className="mt-2 text-sm text-red-800 whitespace-pre-wrap break-words">{record.qaEarlyInterventionReason}</p>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2 mt-3">
                     {record.modifiedModules.map((module) => (
                       <span key={module} className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
@@ -798,12 +821,18 @@ const VersionWorkbenchPage: React.FC = () => {
                   <p className="text-xs text-gray-600">RD 冒烟未补齐</p>
                   <p className="mt-2 text-2xl font-bold text-gray-900">{rdSummary.pendingCount}</p>
                 </div>
+                <div className="rounded-lg border border-rose-100 bg-rose-50 p-3">
+                  <p className="text-xs text-rose-700">紧急 QA 介入</p>
+                  <p className="mt-2 text-2xl font-bold text-rose-800">{rdSummary.urgentOverrideCount}</p>
+                </div>
               </div>
 
               <div className="rounded-lg border border-gray-200 bg-white p-4">
                 <p className="text-sm font-semibold text-gray-900 mb-3">RD 提测判断</p>
                 {releaseNotes.length === 0 ? (
                   <p className="text-sm text-gray-400">当前版本下还没有关联的 Release Note。</p>
+                ) : rdSummary.urgentOverrideCount > 0 ? (
+                  <p className="text-sm text-rose-700">存在紧急版本允许 QA 提前介入，即使 RD 尚未完成冒烟，也可以先创建测试记录并同步记录风险。</p>
                 ) : rdSummary.failedCount > 0 ? (
                   <p className="text-sm text-red-700">存在 RD 冒烟失败项，建议先完成研发侧自测修复，再进入 QA 准出判断。</p>
                 ) : rdSummary.pendingCount > 0 ? (

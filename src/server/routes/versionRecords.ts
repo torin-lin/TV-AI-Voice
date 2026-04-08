@@ -26,6 +26,14 @@ const isValidVersionStatus = (value: unknown): value is VersionStatus => {
   return typeof value === 'string' && value in VERSION_STATUS_FLOW;
 };
 
+const canCreateQaRecordFromReleaseNote = (releaseNote: any) => {
+  return releaseNote?.rdSmokeStatus === '通过' || releaseNote?.severity === '紧急';
+};
+
+const requiresEarlyInterventionReason = (releaseNote: any) => {
+  return releaseNote?.severity === '紧急' && releaseNote?.rdSmokeStatus !== '通过';
+};
+
 export function setupVersionRecordRoutes(app: any): void {
 
   /** GET /api/version-records/parent-versions */
@@ -120,8 +128,11 @@ export function setupVersionRecordRoutes(app: any): void {
       if (!releaseNote) {
         return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
       }
-      if (releaseNote.rdSmokeStatus !== '通过') {
-        return res.status(400).json({ success: false, message: '只有 RD 冒烟通过的版本才能创建 QA 版本记录' });
+      if (!canCreateQaRecordFromReleaseNote(releaseNote)) {
+        return res.status(400).json({ success: false, message: '只有 RD 冒烟通过或紧急版本才能创建 QA 版本记录' });
+      }
+      if (requiresEarlyInterventionReason(releaseNote) && !String(req.body.qaEarlyInterventionReason || '').trim()) {
+        return res.status(400).json({ success: false, message: '紧急版本提前介入时必须填写介入原因' });
       }
       const payload = {
         ...req.body,
@@ -147,8 +158,11 @@ export function setupVersionRecordRoutes(app: any): void {
         if (!releaseNote) {
           return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
         }
-        if (releaseNote.rdSmokeStatus !== '通过') {
-          return res.status(400).json({ success: false, message: '只有 RD 冒烟通过的版本才能关联到 QA 版本记录' });
+        if (!canCreateQaRecordFromReleaseNote(releaseNote)) {
+          return res.status(400).json({ success: false, message: '只有 RD 冒烟通过或紧急版本才能关联到 QA 版本记录' });
+        }
+        if (requiresEarlyInterventionReason(releaseNote) && !String(req.body.qaEarlyInterventionReason || current.qaEarlyInterventionReason || '').trim()) {
+          return res.status(400).json({ success: false, message: '紧急版本提前介入时必须填写介入原因' });
         }
         req.body.versionNumber = releaseNote.version;
         req.body.parentVersion = releaseNote.parentVersion || '';

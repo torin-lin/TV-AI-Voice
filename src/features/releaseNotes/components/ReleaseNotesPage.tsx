@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import { AppDispatch, RootState } from '../../../store';
 import {
   fetchReleaseNotes,
@@ -25,6 +26,7 @@ import { VersionRecord } from '../../../types/database';
 const ReleaseNotesPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { t } = useI18n();
+  const [searchParams] = useSearchParams();
   const {
     items,
     loading,
@@ -39,9 +41,16 @@ const ReleaseNotesPage: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<ReleaseNote | null>(null);
   const [defaultParentVersion, setDefaultParentVersion] = useState('');
   const [qaRecords, setQaRecords] = useState<VersionRecord[]>([]);
-  
+  const keywordFromUrl = searchParams.get('keyword') || undefined;
 
   // 初始化加载数据
+  useEffect(() => {
+    if (keywordFromUrl && filters.keyword !== keywordFromUrl) {
+      dispatch(setFilters({ ...filters, keyword: keywordFromUrl }));
+      dispatch(setPagination({ page: 1, pageSize: pagination.pageSize }));
+    }
+  }, [dispatch, filters, keywordFromUrl, pagination.pageSize]);
+
   useEffect(() => {
     dispatch(
       fetchReleaseNotes({

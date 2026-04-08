@@ -145,6 +145,8 @@ export function setupReleaseNoteRoutes(app: any): void {
         affectedModules: record.affectedModules || [],
         regressionRisk: record.regressionRisk,
         rdSmokeStatus: record.rdSmokeStatus || '未测试',
+        severity: record.severity,
+        qaEntryMode: record.rdSmokeStatus === '通过' ? 'rd_smoke_passed' : 'urgent_override',
         author: record.author,
         branch: record.branch,
       }));

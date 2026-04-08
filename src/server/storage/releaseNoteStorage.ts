@@ -37,7 +37,7 @@ export function findById(id: string): ReleaseNote | undefined {
 }
 
 export function getEligibleQaReleaseNotes(projectType?: string): ReleaseNote[] {
-  let sql = `SELECT * FROM release_notes WHERE rdSmokeStatus = '通过'`;
+  let sql = `SELECT * FROM release_notes WHERE rdSmokeStatus = '通过' OR severity = '紧急'`;
   const params: any[] = [];
   if (projectType) {
     sql += ' AND projectType = ?';

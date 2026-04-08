@@ -48,6 +48,8 @@ export interface VersionRecord {
   id?: string;
   /** 关联的 RD Release Note ID */
   releaseNoteId?: string;
+  /** 紧急版本下 QA 提前介入原因 */
+  qaEarlyInterventionReason?: string;
   versionNumber: string;
   /** 关联主版本号，为空表示自身是主版本 */
   parentVersion?: string;

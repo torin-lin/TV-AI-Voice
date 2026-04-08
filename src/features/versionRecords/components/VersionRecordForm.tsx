@@ -150,6 +150,8 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
   const [resultUploadError, setResultUploadError] = useState('');
   const resultInputRef = useRef<HTMLInputElement>(null);
   const [eligibleReleaseNotes, setEligibleReleaseNotes] = useState<EligibleQaReleaseNoteInfo[]>([]);
+  const selectedReleaseNote = eligibleReleaseNotes.find((item) => item.id === formData.releaseNoteId);
+  const isUrgentOverride = selectedReleaseNote?.qaEntryMode === 'urgent_override';
 
   useEffect(() => { if (record) setFormData(record); }, [record]);
   useEffect(() => {
@@ -158,7 +160,10 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
-    if (!record?.id && !formData.releaseNoteId) newErrors.releaseNoteId = '请先选择一个 RD 冒烟通过的版本';
+    if (!record?.id && !formData.releaseNoteId) newErrors.releaseNoteId = '请先选择一个 RD 冒烟通过或紧急版本';
+    if (isUrgentOverride && !formData.qaEarlyInterventionReason?.trim()) {
+      newErrors.qaEarlyInterventionReason = '紧急版本提前介入时必须填写介入原因';
+    }
     if (!formData.versionNumber?.trim()) newErrors.versionNumber = '版本号不能为空';
     if (!formData.changeDescription?.trim()) newErrors.changeDescription = '修改内容不能为空';
     if (!formData.modifiedModules || formData.modifiedModules.length === 0) newErrors.modifiedModules = '至少选择一个修改模块';
@@ -269,6 +274,15 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {(() => {
+        if (!isUrgentOverride) return null;
+        return (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            当前关联的是紧急 RD 版本。即使 RD 尚未完成冒烟，QA 也允许提前介入创建测试记录。
+          </div>
+        );
+      })()}
+
       {formData.releaseNoteId && !eligibleReleaseNotes.some((item) => item.id === formData.releaseNoteId) && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
           当前记录绑定的是历史 RD 版本，暂未出现在“可新建 QA 记录”的候选列表中。
@@ -285,7 +299,7 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
           onChange={handleInputChange}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="">{record?.id ? '未绑定旧记录，可重新选择' : '请选择 RD 冒烟通过的版本'}</option>
+          <option value="">{record?.id ? '未绑定旧记录，可重新选择' : '请选择 RD 冒烟通过或紧急版本'}</option>
           {formData.releaseNoteId && !eligibleReleaseNotes.some((item) => item.id === formData.releaseNoteId) && (
             <option value={formData.releaseNoteId}>
               {`${formData.versionNumber || '历史版本'}（当前已关联）`}
@@ -293,13 +307,30 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
           )}
           {eligibleReleaseNotes.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.version} {item.projectType ? `(${item.projectType})` : ''} - {item.branch} / {item.author}
+              {item.version} {item.projectType ? `(${item.projectType})` : ''} - {item.branch} / {item.author}{item.qaEntryMode === 'urgent_override' ? ' [紧急介入]' : ''}
             </option>
           ))}
         </select>
-        <p className="text-xs text-gray-400 mt-1">QA 版本记录只能基于 RD 冒烟通过的 Release Note 创建。同一个 RD 版本可以创建多条不同固件的测试记录。</p>
+        <p className="text-xs text-gray-400 mt-1">QA 版本记录可以基于 RD 冒烟通过的 Release Note 创建；如果版本严重程度为紧急，即使 RD 尚未冒烟也允许 QA 提前介入。同一个 RD 版本可以创建多条不同固件的测试记录。</p>
         {errors.releaseNoteId && <p className="text-red-500 text-sm mt-1">{errors.releaseNoteId}</p>}
       </div>
+
+      {isUrgentOverride && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            提前介入原因 <span className="text-red-500">*</span>
+          </label>
+          <Textarea
+            name="qaEarlyInterventionReason"
+            value={formData.qaEarlyInterventionReason || ''}
+            onChange={handleInputChange}
+            placeholder="说明为什么 RD 尚未完成冒烟时，QA 需要提前介入测试"
+            rows={3}
+            error={errors.qaEarlyInterventionReason}
+          />
+          <p className="text-xs text-gray-400 mt-1">建议记录紧急背景、影响范围、介入目标和当前已知风险。</p>
+        </div>
+      )}
 
       {formData.parentVersion && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">

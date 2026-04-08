@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useSearchParams } from 'react-router-dom';
 import { AppDispatch, RootState } from '../../../store';
 import {
   fetchVersionRecords,
@@ -23,6 +24,7 @@ import { useI18n } from '../../../i18n/I18nProvider';
 const VersionRecordsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { t } = useI18n();
+  const [searchParams] = useSearchParams();
   const {
     items,
     loading,
@@ -35,8 +37,16 @@ const VersionRecordsPage: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<VersionRecord | null>(null);
+  const keywordFromUrl = searchParams.get('keyword') || undefined;
 
   // 初始化加载数据
+  useEffect(() => {
+    if (keywordFromUrl && filters.keyword !== keywordFromUrl) {
+      dispatch(setFilters({ ...filters, keyword: keywordFromUrl }));
+      dispatch(setPagination({ page: 1, pageSize: pagination.pageSize }));
+    }
+  }, [dispatch, filters, keywordFromUrl, pagination.pageSize]);
+
   useEffect(() => {
     dispatch(
       fetchVersionRecords({

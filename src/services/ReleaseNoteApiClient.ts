@@ -103,6 +103,8 @@ export interface EligibleQaReleaseNoteInfo {
   affectedModules: string[];
   regressionRisk?: '低' | '中' | '高';
   rdSmokeStatus: '通过' | '失败' | '未测试';
+  severity: '低' | '中' | '高' | '紧急';
+  qaEntryMode: 'rd_smoke_passed' | 'urgent_override';
   author: string;
   branch: string;
 }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store';
 import { ReleaseNote, VersionRecord } from '../../../types/database';
@@ -186,6 +187,22 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                       <div className="min-w-0">
                         <p>{qaStats.recordCount} 条记录</p>
                         <p className="mt-1 text-xs text-gray-400">{qaStats.firmwareCount} 个固件</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Link
+                            to={`/version-records?keyword=${encodeURIComponent(r.version)}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-blue-700 hover:text-blue-900 hover:underline"
+                          >
+                            查看 QA
+                          </Link>
+                          <Link
+                            to={`/version-workbench/${encodeURIComponent(r.parentVersion || r.version)}${r.projectType ? `?projectType=${encodeURIComponent(r.projectType)}` : ''}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-violet-700 hover:text-violet-900 hover:underline"
+                          >
+                            工作台
+                          </Link>
+                        </div>
                       </div>
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-600">{formatDateTime(r.createdAt)}</td>
@@ -249,10 +266,30 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                             </ReleaseNoteDetailSection>
                             <ReleaseNoteDetailSection title="QA 覆盖">
                               <ReleaseNoteDetailCard label="QA 测试记录">
-                                <span>{qaStats.recordCount}</span>
+                                <div className="space-y-2">
+                                  <span>{qaStats.recordCount}</span>
+                                  <div>
+                                    <Link
+                                      to={`/version-records?keyword=${encodeURIComponent(r.version)}`}
+                                      className="text-xs text-blue-700 hover:text-blue-900 hover:underline"
+                                    >
+                                      查看关联 QA 记录
+                                    </Link>
+                                  </div>
+                                </div>
                               </ReleaseNoteDetailCard>
                               <ReleaseNoteDetailCard label="已测固件数">
-                                <span>{qaStats.firmwareCount}</span>
+                                <div className="space-y-2">
+                                  <span>{qaStats.firmwareCount}</span>
+                                  <div>
+                                    <Link
+                                      to={`/version-workbench/${encodeURIComponent(r.parentVersion || r.version)}${r.projectType ? `?projectType=${encodeURIComponent(r.projectType)}` : ''}`}
+                                      className="text-xs text-violet-700 hover:text-violet-900 hover:underline"
+                                    >
+                                      打开版本工作台
+                                    </Link>
+                                  </div>
+                                </div>
                               </ReleaseNoteDetailCard>
                             </ReleaseNoteDetailSection>
                             <ReleaseNoteDetailSection title="附件资源">
@@ -351,10 +388,30 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                                     </ReleaseNoteDetailSection>
                                     <ReleaseNoteDetailSection title="QA 覆盖">
                                       <ReleaseNoteDetailCard label="QA 测试记录">
-                                        <span>{childQaStats.recordCount}</span>
+                                        <div className="space-y-2">
+                                          <span>{childQaStats.recordCount}</span>
+                                          <div>
+                                            <Link
+                                              to={`/version-records?keyword=${encodeURIComponent(child.version)}`}
+                                              className="text-xs text-blue-700 hover:text-blue-900 hover:underline"
+                                            >
+                                              查看关联 QA 记录
+                                            </Link>
+                                          </div>
+                                        </div>
                                       </ReleaseNoteDetailCard>
                                       <ReleaseNoteDetailCard label="已测固件数">
-                                        <span>{childQaStats.firmwareCount}</span>
+                                        <div className="space-y-2">
+                                          <span>{childQaStats.firmwareCount}</span>
+                                          <div>
+                                            <Link
+                                              to={`/version-workbench/${encodeURIComponent(child.parentVersion || child.version)}${child.projectType ? `?projectType=${encodeURIComponent(child.projectType)}` : ''}`}
+                                              className="text-xs text-violet-700 hover:text-violet-900 hover:underline"
+                                            >
+                                              打开版本工作台
+                                            </Link>
+                                          </div>
+                                        </div>
                                       </ReleaseNoteDetailCard>
                                     </ReleaseNoteDetailSection>
                                     <ReleaseNoteDetailSection title="附件资源">
