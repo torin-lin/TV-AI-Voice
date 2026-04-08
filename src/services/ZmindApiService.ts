@@ -12,6 +12,7 @@ export interface ZmindIssueInfo {
   subject: string;
   firmwareVersion: string;
   description: string;
+  issueCreatedAt: string;
 }
 
 /**

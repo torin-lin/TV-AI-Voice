@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from '../../../store';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../../../store';
 import { VersionRecord } from '../../../types/database';
 import { createVersionRecord, updateVersionRecord } from '../store/versionRecordsSlice';
 import VersionRecordForm from './VersionRecordForm';
@@ -19,7 +19,12 @@ const VersionRecordModal: React.FC<VersionRecordModalProps> = ({
   onClose,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const [loading, setLoading] = useState(false);
+
+  // 根据当前项目组映射默认 projectType
+  const projectTypeMap: Record<string, string> = { 'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB' };
+  const defaultProjectType = projectTypeMap[currentProject] || 'TV';
 
   // 处理表单提交
   const handleSubmit = async (data: Partial<VersionRecord>) => {
@@ -72,6 +77,7 @@ const VersionRecordModal: React.FC<VersionRecordModalProps> = ({
         <div className="p-6">
           <VersionRecordForm
             record={record}
+            defaultProjectType={defaultProjectType}
             onSubmit={handleSubmit}
             onCancel={onClose}
             loading={loading}

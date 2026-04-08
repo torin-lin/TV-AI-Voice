@@ -5,7 +5,7 @@
 import { getDb, generateId } from './sqlite';
 import { ReleaseNote } from '../../types/database';
 
-const JSON_FIELDS = ['affectedModules', 'affectedFeatures'];
+const JSON_FIELDS = ['affectedModules', 'affectedFeatures', 'fixedPRs'];
 
 function rowToRecord(row: any): ReleaseNote {
   const r = { ...row };
@@ -53,6 +53,8 @@ export function create(data: Omit<ReleaseNote, 'id' | 'createdAt' | 'updatedAt'>
 export function update(id: string, data: Partial<ReleaseNote>): boolean {
   const row = recordToRow({ ...data, updatedAt: Date.now() });
   delete row.id; delete row.createdAt;
+  // 过滤掉非数据库列（如前端附带的 children）
+  delete row.children;
   const cols = Object.keys(row).filter((k) => row[k] !== undefined);
   if (cols.length === 0) return false;
   const result = getDb().prepare(`UPDATE release_notes SET ${cols.map((c) => `${c}=?`).join(',')} WHERE id=?`).run(...cols.map((c) => row[c] ?? null), id);

@@ -65,18 +65,30 @@ export function setupZmindProxyRoutes(app: any): void {
       }
 
       const data = await response.json();
-      const description = data?.issue?.description || '';
+      const issue = data?.issue;
+      const description = issue?.description || '';
 
-      // 解析 Tested Environment 下面一行的内容
-      const firmwareVersion = parseFirmwareVersion(description);
+      // 解析固件版本：优先 Tested Environment，其次 Issue Version (fixed_version)
+      let firmwareVersion = parseFirmwareVersion(description);
+      if (!firmwareVersion && issue?.fixed_version?.name) {
+        firmwareVersion = issue.fixed_version.name;
+      }
+      // 也检查 custom_fields 中的 Version 字段
+      if (!firmwareVersion && issue?.custom_fields) {
+        const versionField = issue.custom_fields.find((f: any) =>
+          /version/i.test(f.name)
+        );
+        if (versionField?.value) firmwareVersion = versionField.value;
+      }
 
       res.json({
         success: true,
         data: {
           issueId,
-          subject: data?.issue?.subject || '',
+          subject: issue?.subject || '',
           firmwareVersion,
           description,
+          issueCreatedAt: issue?.created_on || '',
         },
       });
     } catch (error) {

@@ -8,6 +8,7 @@ import CustomerProblemsPage from './features/customerProblems/components/Custome
 import RecommendationsPage from './features/recommendations/components/RecommendationsPage';
 import VoiceRecordsPage from './pages/VoiceRecordsPage';
 import SettingsPage from './pages/SettingsPage';
+import AliasTestPage from './pages/AliasTestPage';
 
 /**
  * 主应用组件
@@ -23,6 +24,7 @@ const App: React.FC = () => {
           <Route path="/customer-problems" element={<CustomerProblemsPage />} />
           <Route path="/voice-records" element={<VoiceRecordsPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
+          <Route path="/alias-test" element={<AliasTestPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

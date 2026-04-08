@@ -84,3 +84,17 @@ export async function apiSearchReleaseNotes(
 
   return apiFetch<PaginationResult<ReleaseNote>>(`/api/release-notes/search?${params.toString()}`);
 }
+
+
+// ==================== 大版本列表 ====================
+
+export interface ParentVersionInfo {
+  version: string;
+  projectType?: string;
+  id: string;
+}
+
+export async function apiGetParentVersions(projectType?: string): Promise<ParentVersionInfo[]> {
+  const qs = projectType ? `?projectType=${projectType}` : '';
+  return apiFetch<ParentVersionInfo[]>(`/api/release-notes/parent-versions${qs}`);
+}

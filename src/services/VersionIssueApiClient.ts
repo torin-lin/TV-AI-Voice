@@ -21,6 +21,8 @@ export async function createVersionIssue(data: {
   versionRecordId: string;
   title: string;
   description?: string;
+  precondition?: string;
+  testEnvironment?: string;
   severity?: string;
   linkedPR?: string;
   reporter: string;

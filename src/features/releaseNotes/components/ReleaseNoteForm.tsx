@@ -5,9 +5,13 @@ import { Input } from '../../../components/common/Input';
 import { Select } from '../../../components/common/Select';
 import { Textarea } from '../../../components/common/Textarea';
 import { uploadApk, formatFileSize, ApkUploadResult } from '../../../services/ApkUploadService';
+import { apiGetParentVersions, ParentVersionInfo } from '../../../services/ReleaseNoteApiClient';
 
 interface ReleaseNoteFormProps {
   record?: ReleaseNote | null;
+  defaultProjectType?: string;
+  /** 预设的父版本号（从大版本下添加子版本时传入） */
+  defaultParentVersion?: string;
   onSubmit: (data: Partial<ReleaseNote>) => void;
   onCancel: () => void;
   loading?: boolean;
@@ -123,12 +127,15 @@ const TagInput: React.FC<{
  */
 const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
   record,
+  defaultProjectType,
+  defaultParentVersion,
   onSubmit,
   onCancel,
   loading = false,
 }) => {
   const [formData, setFormData] = useState<Partial<ReleaseNote>>({
     version: '',
+    parentVersion: defaultParentVersion || '',
     branch: '',
     author: '',
     changeDescription: '',
@@ -140,7 +147,8 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
     affectedFeatures: [],
     breakingChanges: false,
     migrationType: '无',
-    projectType: 'TV',
+    fixedPRs: [],
+    projectType: (defaultProjectType as any) || 'TV',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -149,10 +157,16 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
   const [apkUploadProgress, setApkUploadProgress] = useState(0);
   const [apkUploadError, setApkUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [parentVersions, setParentVersions] = useState<ParentVersionInfo[]>([]);
 
   useEffect(() => {
     if (record) setFormData(record);
   }, [record]);
+
+  // 加载大版本列表
+  useEffect(() => {
+    apiGetParentVersions().then(setParentVersions).catch(() => {});
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -255,8 +269,31 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           </label>
           <Input
             type="text" name="version" value={formData.version || ''}
-            onChange={handleInputChange} placeholder="例如: v1.0.0" error={errors.version}
+            onChange={handleInputChange} placeholder={formData.parentVersion ? '例如: 10.5.0.002-Pre' : '例如: 10.5.0-Pre'} error={errors.version}
           />
+        </div>
+
+        {/* 所属大版本 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            所属大版本
+          </label>
+          <select
+            name="parentVersion"
+            value={formData.parentVersion || ''}
+            onChange={handleInputChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">无（自身为大版本）</option>
+            {parentVersions.map((pv) => (
+              <option key={pv.id} value={pv.version}>
+                {pv.version}{pv.projectType ? ` (${pv.projectType})` : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-400 mt-1">
+            {formData.parentVersion ? '子版本：将归属到大版本下' : '大版本：可在此版本下添加子版本 APK'}
+          </p>
         </div>
 
         {/* 分支名 */}
@@ -275,10 +312,20 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-1">
             作者 <span className="text-red-500">*</span>
           </label>
-          <Input
-            type="text" name="author" value={formData.author || ''}
-            onChange={handleInputChange} placeholder="开发者名称" error={errors.author}
-          />
+          <div className="flex gap-2">
+            <select
+              name="author" value={formData.author || ''}
+              onChange={handleInputChange}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">选择或输入...</option>
+              <option value="jeson.zhang">jeson.zhang</option>
+            </select>
+            <Input
+              type="text" name="author" value={formData.author || ''}
+              onChange={handleInputChange} placeholder="自定义输入" error={errors.author}
+            />
+          </div>
         </div>
 
         {/* 项目类型 */}
@@ -379,6 +426,15 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           error={errors.changeDescription}
         />
       </div>
+
+      {/* 修复 PR 列表 */}
+      <TagInput
+        label="修复 PR 列表"
+        tags={formData.fixedPRs || []}
+        onChange={(tags) => setFormData((prev) => ({ ...prev, fixedPRs: tags }))}
+        suggestions={[]}
+        placeholder="输入 PR/CR 号后回车添加"
+      />
 
       {/* 受影响的模块 — 标签输入 */}
       <TagInput

@@ -14,6 +14,7 @@ const CLASSIFICATIONS = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络'
 interface CustomerProblemFormProps {
   problem?: CustomerProblem | null;
   problemType: 'customer' | 'qa';
+  defaultProjectType?: string;
   onSubmit: (data: Partial<CustomerProblem>) => void;
   onCancel: () => void;
   loading?: boolean;
@@ -22,6 +23,7 @@ interface CustomerProblemFormProps {
 const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
   problem,
   problemType,
+  defaultProjectType,
   onSubmit,
   onCancel,
   loading = false,
@@ -36,7 +38,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
     classification: undefined,
     status: '开放',
     linkedQaProblems: [],
-    projectType: 'TV',
+    projectType: (defaultProjectType as any) || 'TV',
     notes: '',
   });
 
@@ -44,6 +46,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
   const [fetchingFirmware, setFetchingFirmware] = useState(false);
   const [firmwareError, setFirmwareError] = useState('');
   const [qaSearch, setQaSearch] = useState('');
+  const [customClassification, setCustomClassification] = useState('');
 
   useEffect(() => {
     if (problem) {
@@ -70,7 +73,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
     if (errors[name]) setErrors((prev) => { const n = { ...prev }; delete n[name]; return n; });
   };
 
-  /** 输入PR号后自动获取固件版本 */
+  /** 输入PR号后自动获取固件版本和创建时间 */
   const handleFetchFirmware = async () => {
     const issueId = formData.issueId?.trim();
     if (!issueId) return;
@@ -82,9 +85,10 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
         ...prev,
         firmwareVersion: info.firmwareVersion || prev.firmwareVersion,
         description: info.subject || prev.description,
+        issueCreatedAt: info.issueCreatedAt || prev.issueCreatedAt,
       }));
       if (!info.firmwareVersion) {
-        setFirmwareError('未找到 Tested Environment 信息');
+        setFirmwareError('未找到固件版本信息（Tested Environment / Issue Version）');
       }
     } catch (err) {
       setFirmwareError((err as Error).message);
@@ -148,6 +152,25 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
         />
       </div>
 
+      {/* 问题创建时间（追责时间轴） */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">问题创建时间（追责时间轴）</label>
+        <Input
+          type="text"
+          name="issueCreatedAt"
+          value={formData.issueCreatedAt ? new Date(formData.issueCreatedAt).toLocaleString('zh-CN') : ''}
+          onChange={() => {}}
+          placeholder="同步 PR 后自动获取，无 PR 则以提交时间为准"
+          disabled
+        />
+        {formData.issueCreatedAt && (
+          <p className="text-xs text-gray-500 mt-1">📅 来源: zmind PR#{formData.issueId} 创建时间</p>
+        )}
+        {!formData.issueCreatedAt && formData.issueId && (
+          <p className="text-xs text-gray-400 mt-1">点击"获取固件版本"同步创建时间</p>
+        )}
+      </div>
+
       {/* 问题描述 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -181,6 +204,25 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
               {c}
             </button>
           ))}
+          {formData.classification && !CLASSIFICATIONS.includes(formData.classification) && (
+            <span className="px-3 py-1 rounded-full text-sm bg-blue-500 text-white">{formData.classification}</span>
+          )}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <input
+            type="text"
+            value={customClassification}
+            onChange={(e) => setCustomClassification(e.target.value)}
+            placeholder="自定义分类"
+            className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const v = customClassification.trim(); if (v) { setFormData((prev) => ({ ...prev, classification: v })); setCustomClassification(''); } } }}
+          />
+          <button
+            type="button"
+            onClick={() => { const v = customClassification.trim(); if (v) { setFormData((prev) => ({ ...prev, classification: v })); setCustomClassification(''); } }}
+            disabled={!customClassification.trim()}
+            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          >确定</button>
         </div>
       </div>
 
@@ -214,7 +256,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
         />
       </div>
 
-      {/* 关联QA问题（仅客户问题显示） */}
+      {/* 关联QA问题（仅客户问题显示）- 智能推荐 */}
       {problemType === 'customer' && qaItems.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">关联 QA 问题（追责时间轴）</label>
@@ -225,39 +267,78 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
             placeholder="搜索 QA 问题（描述、PR号、分类）"
             className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
           />
-          <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
-            {qaItems
-              .filter((qa) => {
-                if (!qaSearch.trim()) return true;
-                const kw = qaSearch.toLowerCase();
+          <div className="max-h-48 overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg p-2 space-y-1">
+            {(() => {
+              // 智能推荐：计算每个 QA 问题的匹配分数
+              const scored = qaItems
+                .filter((qa) => {
+                  if (!qaSearch.trim()) return true;
+                  const kw = qaSearch.toLowerCase();
+                  return (
+                    (qa.description || '').toLowerCase().includes(kw) ||
+                    (qa.issueId || '').toLowerCase().includes(kw) ||
+                    (qa.classification || '').toLowerCase().includes(kw) ||
+                    (qa.firmwareVersion || '').toLowerCase().includes(kw)
+                  );
+                })
+                .map((qa) => {
+                  let score = 0;
+                  // 固件版本匹配（权重最高）
+                  if (formData.firmwareVersion && qa.firmwareVersion &&
+                    qa.firmwareVersion.toLowerCase().includes(formData.firmwareVersion.toLowerCase())) {
+                    score += 30;
+                  }
+                  // 分类匹配
+                  if (formData.classification && qa.classification === formData.classification) {
+                    score += 20;
+                  }
+                  // 描述关键词匹配
+                  if (formData.description && qa.description) {
+                    const words = formData.description.toLowerCase().split(/[\s,，。.、;；]+/).filter(w => w.length >= 2);
+                    const qaDesc = qa.description.toLowerCase();
+                    for (const w of words) {
+                      if (qaDesc.includes(w)) score += 5;
+                    }
+                  }
+                  // 项目类型匹配
+                  if (formData.projectType && qa.projectType === formData.projectType) {
+                    score += 10;
+                  }
+                  // 已关联的排最前
+                  if ((formData.linkedQaProblems || []).includes(qa.id!)) score += 100;
+                  return { qa, score };
+                })
+                .sort((a, b) => b.score - a.score);
+
+              return scored.map(({ qa, score }) => {
+                const isLinked = (formData.linkedQaProblems || []).includes(qa.id!);
+                const isRecommended = !isLinked && score >= 15;
                 return (
-                  (qa.description || '').toLowerCase().includes(kw) ||
-                  (qa.issueId || '').toLowerCase().includes(kw) ||
-                  (qa.classification || '').toLowerCase().includes(kw) ||
-                  (qa.firmwareVersion || '').toLowerCase().includes(kw)
-                );
-              })
-              .map((qa) => {
-              const isLinked = (formData.linkedQaProblems || []).includes(qa.id!);
-              return (
-                <div
-                  key={qa.id}
-                  onClick={() => toggleQaLink(qa.id!)}
-                  className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
-                    isLinked ? 'bg-blue-100 border border-blue-300' : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <input type="checkbox" checked={isLinked} readOnly className="rounded" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900 truncate">{qa.description}</p>
-                    <p className="text-xs text-gray-500">
-                      {qa.issueId && `PR#${qa.issueId} · `}
-                      {qa.classification || '未分类'} · {qa.status}
-                    </p>
+                  <div
+                    key={qa.id}
+                    onClick={() => toggleQaLink(qa.id!)}
+                    className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors overflow-hidden ${
+                      isLinked ? 'bg-blue-100 border border-blue-300'
+                        : isRecommended ? 'bg-amber-50 border border-amber-200 hover:bg-amber-100'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <input type="checkbox" checked={isLinked} readOnly className="rounded flex-shrink-0" />
+                    <div className="flex-1 min-w-0 overflow-hidden">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-gray-900 truncate min-w-0">{qa.description}</p>
+                        {isRecommended && <span className="flex-shrink-0 px-1.5 py-0.5 bg-amber-400 text-white rounded text-[10px] leading-none">推荐</span>}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">
+                        {qa.issueId && `PR#${qa.issueId} · `}
+                        {qa.firmwareVersion && `${qa.firmwareVersion} · `}
+                        {qa.classification || '未分类'} · {qa.status}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </div>
       )}

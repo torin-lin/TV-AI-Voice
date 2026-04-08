@@ -1,194 +1,163 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-
 /**
- * AI 推荐引擎 Redux 状态管理
+ * 知识库 Redux 状态管理
  */
 
-export interface Recommendation {
-  id?: string;
-  versionNumber: string;
-  changeDescription: string;
-  riskLevel: '低' | '中' | '高';
-  recommendedTestCases: string[];
-  recommendedRegressions: string[];
-  reasoning: string;
-  confidence: number;
-  createdAt: number;
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { TestCase, KBRecommendation } from '../../../types/database';
+import {
+  apiGetTestCases, apiGetKBStats, apiCreateTestCase,
+  apiBulkImportTestCases, apiDeleteTestCase, apiUpdateTestCase,
+  apiGetRecommendation, apiGetCategories,
+} from '../../../services/KnowledgeBaseApiClient';
+
+interface KBStats {
+  totalCases: number;
+  totalCategories: number;
+  categories: string[];
+  totalIssues: number;
+  totalProblems: number;
+  totalReleaseNotes: number;
+  totalVersions: number;
 }
 
 interface RecommendationsState {
-  currentRecommendation: Recommendation | null;
-  history: Recommendation[];
+  testCases: TestCase[];
+  categories: string[];
+  stats: KBStats | null;
+  currentRecommendation: KBRecommendation | null;
+  history: KBRecommendation[];
   loading: boolean;
+  importLoading: boolean;
+  recommendLoading: boolean;
   error: string | null;
-  cache: Map<string, Recommendation>;
 }
 
 const initialState: RecommendationsState = {
+  testCases: [],
+  categories: [],
+  stats: null,
   currentRecommendation: null,
   history: [],
   loading: false,
+  importLoading: false,
+  recommendLoading: false,
   error: null,
-  cache: new Map(),
 };
 
-/**
- * 生成推荐
- */
+/** 获取测试用例 */
+export const fetchTestCases = createAsyncThunk(
+  'recommendations/fetchTestCases',
+  async (params?: { keyword?: string; category?: string; projectType?: string }) => {
+    return await apiGetTestCases(params);
+  }
+);
+
+/** 获取分类 */
+export const fetchCategories = createAsyncThunk(
+  'recommendations/fetchCategories',
+  async () => await apiGetCategories()
+);
+
+/** 获取统计 */
+export const fetchKBStats = createAsyncThunk(
+  'recommendations/fetchKBStats',
+  async () => await apiGetKBStats()
+);
+
+/** 创建测试用例 */
+export const addTestCase = createAsyncThunk(
+  'recommendations/addTestCase',
+  async (data: Partial<TestCase>) => {
+    await apiCreateTestCase(data);
+    return await apiGetTestCases();
+  }
+);
+
+/** 批量导入 */
+export const bulkImport = createAsyncThunk(
+  'recommendations/bulkImport',
+  async (cases: Partial<TestCase>[]) => {
+    const count = await apiBulkImportTestCases(cases);
+    const updated = await apiGetTestCases();
+    return { count, cases: updated };
+  }
+);
+
+/** 删除测试用例 */
+export const deleteTestCase = createAsyncThunk(
+  'recommendations/deleteTestCase',
+  async (id: string) => {
+    await apiDeleteTestCase(id);
+    return id;
+  }
+);
+
+/** 更新测试用例 */
+export const editTestCase = createAsyncThunk(
+  'recommendations/editTestCase',
+  async ({ id, data }: { id: string; data: Partial<TestCase> }) => {
+    await apiUpdateTestCase(id, data);
+    return await apiGetTestCases();
+  }
+);
+
+/** 生成推荐 */
 export const generateRecommendation = createAsyncThunk(
   'recommendations/generateRecommendation',
-  async (
-    params: {
-      versionNumber: string;
-      changeDescription: string;
-      riskLevel: '低' | '中' | '高';
-    },
-    { rejectWithValue }
-  ) => {
-    try {
-      // 模拟 AI 推荐逻辑
-      const { versionNumber, changeDescription, riskLevel } = params;
-
-      // 根据风险等级生成推荐
-      let recommendedTestCases: string[] = [];
-      let recommendedRegressions: string[] = [];
-
-      if (riskLevel === '低') {
-        recommendedTestCases = ['冒烟测试', '基础功能测试'];
-        recommendedRegressions = ['定向回归测试'];
-      } else if (riskLevel === '中') {
-        recommendedTestCases = ['冒烟测试', '功能测试', '边界测试'];
-        recommendedRegressions = ['语音专项回归', '定向回归测试'];
-      } else {
-        recommendedTestCases = ['冒烟测试', '功能测试', '边界测试', '压力测试'];
-        recommendedRegressions = ['全链路回归', '语音专项回归', '系统回归'];
-      }
-
-      // 分析修改内容
-      const keywords = changeDescription.toLowerCase();
-      if (keywords.includes('蓝牙')) {
-        recommendedRegressions.push('蓝牙连接回归');
-      }
-      if (keywords.includes('录音')) {
-        recommendedRegressions.push('录音功能回归');
-      }
-      if (keywords.includes('asr')) {
-        recommendedRegressions.push('ASR 识别回归');
-      }
-      if (keywords.includes('nlu')) {
-        recommendedRegressions.push('NLU 理解回归');
-      }
-
-      const recommendation: Recommendation = {
-        id: `rec_${Date.now()}`,
-        versionNumber,
-        changeDescription,
-        riskLevel,
-        recommendedTestCases,
-        recommendedRegressions: [...new Set(recommendedRegressions)],
-        reasoning: `基于版本 ${versionNumber} 的修改内容和 ${riskLevel} 风险等级，推荐以上测试用例和回归测试。`,
-        confidence: 0.85 + Math.random() * 0.15,
-        createdAt: Date.now(),
-      };
-
-      return recommendation;
-    } catch (error) {
-      return rejectWithValue((error as Error).message);
-    }
+  async (params: {
+    versionRecordId?: string;
+    versionNumber: string;
+    changeDescription: string;
+    modules?: string[];
+    riskLevel?: string;
+    projectType?: string;
+    useAI?: boolean;
+    apiKey?: string;
+    endpoint?: string;
+    modelName?: string;
+  }) => {
+    return await apiGetRecommendation(params);
   }
 );
 
-/**
- * 从缓存获取推荐
- */
-export const getRecommendationFromCache = createAsyncThunk(
-  'recommendations/getRecommendationFromCache',
-  async (cacheKey: string, { rejectWithValue }) => {
-    try {
-      // 从 localStorage 获取缓存
-      const cached = localStorage.getItem(`recommendation_${cacheKey}`);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-      throw new Error('缓存不存在');
-    } catch (error) {
-      return rejectWithValue((error as Error).message);
-    }
-  }
-);
-
-/**
- * Redux Slice
- */
 const recommendationsSlice = createSlice({
   name: 'recommendations',
   initialState,
   reducers: {
-    setCurrentRecommendation: (state, action: PayloadAction<Recommendation | null>) => {
-      state.currentRecommendation = action.payload;
-    },
-    addToHistory: (state, action: PayloadAction<Recommendation>) => {
-      state.history.unshift(action.payload);
-      // 只保留最近 20 条记录
-      if (state.history.length > 20) {
-        state.history.pop();
-      }
-    },
-    clearHistory: (state) => {
-      state.history = [];
-    },
-    clearError: (state) => {
-      state.error = null;
-    },
+    clearError: (state) => { state.error = null; },
+    clearRecommendation: (state) => { state.currentRecommendation = null; },
+    clearHistory: (state) => { state.history = []; },
   },
   extraReducers: (builder) => {
-    // generateRecommendation
     builder
-      .addCase(generateRecommendation.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
+      .addCase(fetchTestCases.pending, (state) => { state.loading = true; })
+      .addCase(fetchTestCases.fulfilled, (state, action) => { state.loading = false; state.testCases = action.payload; })
+      .addCase(fetchTestCases.rejected, (state, action) => { state.loading = false; state.error = action.error.message || '加载失败'; })
+
+      .addCase(fetchCategories.fulfilled, (state, action) => { state.categories = action.payload; })
+
+      .addCase(fetchKBStats.fulfilled, (state, action) => { state.stats = action.payload; })
+
+      .addCase(addTestCase.fulfilled, (state, action) => { state.testCases = action.payload; })
+
+      .addCase(bulkImport.pending, (state) => { state.importLoading = true; })
+      .addCase(bulkImport.fulfilled, (state, action) => { state.importLoading = false; state.testCases = action.payload.cases; })
+      .addCase(bulkImport.rejected, (state, action) => { state.importLoading = false; state.error = action.error.message || '导入失败'; })
+
+      .addCase(deleteTestCase.fulfilled, (state, action) => { state.testCases = state.testCases.filter((c) => c.id !== action.payload); })
+
+      .addCase(editTestCase.fulfilled, (state, action) => { state.testCases = action.payload; })
+
+      .addCase(generateRecommendation.pending, (state) => { state.recommendLoading = true; state.error = null; })
       .addCase(generateRecommendation.fulfilled, (state, action) => {
-        state.loading = false;
+        state.recommendLoading = false;
         state.currentRecommendation = action.payload;
         state.history.unshift(action.payload);
-        if (state.history.length > 20) {
-          state.history.pop();
-        }
-        // 缓存推荐结果
-        const cacheKey = `${action.payload.versionNumber}_${action.payload.riskLevel}`;
-        localStorage.setItem(`recommendation_${cacheKey}`, JSON.stringify(action.payload));
+        if (state.history.length > 20) state.history.pop();
       })
-      .addCase(generateRecommendation.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
-
-    // getRecommendationFromCache
-    builder
-      .addCase(getRecommendationFromCache.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(getRecommendationFromCache.fulfilled, (state, action) => {
-        state.loading = false;
-        state.currentRecommendation = action.payload;
-      })
-      .addCase(getRecommendationFromCache.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload as string;
-      });
+      .addCase(generateRecommendation.rejected, (state, action) => { state.recommendLoading = false; state.error = action.error.message || '推荐失败'; });
   },
 });
 
-export const { setCurrentRecommendation, addToHistory, clearHistory, clearError } =
-  recommendationsSlice.actions;
-
-// Selectors
-export const selectCurrentRecommendation = (state: any) =>
-  state.recommendations.currentRecommendation;
-export const selectRecommendationHistory = (state: any) => state.recommendations.history;
-export const selectRecommendationLoading = (state: any) => state.recommendations.loading;
-export const selectRecommendationError = (state: any) => state.recommendations.error;
-
+export const { clearError, clearRecommendation, clearHistory } = recommendationsSlice.actions;
 export default recommendationsSlice.reducer;

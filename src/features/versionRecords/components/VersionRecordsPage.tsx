@@ -44,6 +44,12 @@ const VersionRecordsPage: React.FC = () => {
     );
   }, [dispatch, filters, pagination, currentProject]);
 
+  // modal 关闭后重新加载
+  const closeModalAndRefresh = () => {
+    setIsModalOpen(false);
+    dispatch(fetchVersionRecords({ filters: { ...filters, projectGroup: currentProject }, pagination }));
+  };
+
   // 处理添加新记录
   const handleAddRecord = () => {
     setEditingRecord(null);
@@ -152,7 +158,7 @@ const VersionRecordsPage: React.FC = () => {
         {isModalOpen && (
           <VersionRecordModal
             record={editingRecord}
-            onClose={() => setIsModalOpen(false)}
+            onClose={closeModalAndRefresh}
           />
         )}
       </div>

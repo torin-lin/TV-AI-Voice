@@ -9,6 +9,8 @@
 export interface ReleaseNote {
   id?: string;
   version: string;
+  /** 父版本号（大版本），为空表示自身是大版本 */
+  parentVersion?: string;
   branch: string;
   commitHash?: string;
   commitMessage?: string;
@@ -23,6 +25,8 @@ export interface ReleaseNote {
   breakingChanges?: boolean;
   migrationType?: '无' | '数据迁移' | '配置更新' | '其他';
   projectType?: 'TV' | 'Projector' | 'STB';
+  /** 修复的 PR/CR 列表 */
+  fixedPRs?: string[];
   /** APK 文件名 */
   apkFileName?: string;
   /** APK 文件大小（字节） */
@@ -39,6 +43,8 @@ export interface ReleaseNote {
 export interface VersionRecord {
   id?: string;
   versionNumber: string;
+  /** 关联主版本号，为空表示自身是主版本 */
+  parentVersion?: string;
   /** 固件版本号 */
   firmwareVersion?: string;
   /** 关联的 PR/CR 号列表 */
@@ -60,6 +66,12 @@ export interface VersionRecord {
   prototypeFilePath?: string;
   /** 原型文档文件大小 */
   prototypeFileSize?: number;
+  /** 测试结果 Excel 文件名 */
+  testResultFileName?: string;
+  /** 测试结果 Excel 服务端路径 */
+  testResultFilePath?: string;
+  /** 测试结果 Excel 文件大小 */
+  testResultFileSize?: number;
   /** 语言模型 */
   languageModel?: string;
   notes?: string;
@@ -86,6 +98,8 @@ export interface CustomerProblem {
   linkedQaProblems?: string[];
   /** 项目类型 */
   projectType?: 'TV' | 'Projector' | 'STB';
+  /** PR/CR 在 zmind 上的创建时间（追责时间轴依据） */
+  issueCreatedAt?: string;
   notes?: string;
   createdAt: number;
   updatedAt: number;
@@ -102,6 +116,10 @@ export interface VersionIssue {
   title: string;
   /** 问题描述 */
   description?: string;
+  /** 前提条件 */
+  precondition?: string;
+  /** 测试环境 */
+  testEnvironment?: string;
   /** 问题状态 */
   status: '待处理' | '处理中' | '已解决' | '已关闭';
   /** 严重程度 */
@@ -116,6 +134,8 @@ export interface VersionIssue {
   resolution?: string;
   /** 附件列表 (JSON 数组) */
   attachments?: IssueAttachment[];
+  /** 同步到问题追踪的 QA 问题 ID */
+  syncedProblemId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -150,17 +170,55 @@ export interface VoiceRecord {
 }
 
 /**
- * 测试用例接口
+ * 测试用例接口（知识库）
  */
 export interface TestCase {
-  id: string;
+  id?: string;
+  /** 用例编号 */
   caseId: string;
+  /** 用例名称 */
   caseName: string;
+  /** 用例描述（操作步骤） */
   description: string;
+  /** 前置条件 */
+  precondition?: string;
+  /** 测试步骤 */
   steps: string[];
+  /** 预期结果 */
   expectedResult: string;
+  /** 分类（如：语音、蓝牙、系统等） */
   category: string;
-  riskLevel: string;
+  /** 关联模块 */
+  module?: string;
+  /** 优先级 */
+  priority: 'L1' | 'L2' | 'L3' | 'L4' | '高' | '中' | '低';
+  /** 项目类型 */
+  projectType?: 'TV' | 'Projector' | 'STB';
+  /** 关键词标签 */
+  tags?: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * AI 推荐结果接口
+ */
+export interface KBRecommendation {
+  id?: string;
+  /** 关联的版本记录 ID */
+  versionRecordId?: string;
+  /** 版本号 */
+  versionNumber: string;
+  /** 推荐的测试用例 */
+  recommendedCases: { caseId: string; caseName: string; reason: string; score: number }[];
+  /** 需要复测的问题 */
+  retestIssues: { issueId: string; title: string; reason: string; score: number }[];
+  /** 测试计划摘要 */
+  testPlanSummary: string;
+  /** 风险分析 */
+  riskAnalysis: string;
+  /** 是否使用了 AI */
+  usedAI: boolean;
   createdAt: number;
 }
 

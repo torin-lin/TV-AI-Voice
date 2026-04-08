@@ -82,7 +82,12 @@ export function setupCustomerProblemRoutes(app: any): void {
   /** POST /api/customer-problems */
   app.post('/api/customer-problems', (req: any, res: any) => {
     try {
-      const id = create(req.body);
+      const data = { ...req.body };
+      // 如果没有 issueCreatedAt（没同步 PR），以当前时间为准
+      if (!data.issueCreatedAt) {
+        data.issueCreatedAt = new Date().toISOString();
+      }
+      const id = create(data);
       res.json({ success: true, data: { id } });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });

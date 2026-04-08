@@ -28,6 +28,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
   try {
     // 准备数据
     const data = records.map((record) => ({
+      关联版本号: record.parentVersion || record.versionNumber,
       版本号: record.versionNumber,
       固件版本号: record.firmwareVersion || '',
       关联PR_CR: record.linkedIssues?.join('; ') || '',
@@ -40,6 +41,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
       系统回归: record.systemRegressionResult,
       测试周期: record.testCycle || '',
       原型来源: record.prototypeSource || '',
+      测试结果Excel: record.testResultFileName || '',
       备注: record.notes || '',
       创建时间: new Date(record.createdAt).toLocaleString('zh-CN'),
       更新时间: new Date(record.updatedAt).toLocaleString('zh-CN'),
@@ -52,6 +54,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
 
     // 设置列宽
     const columnWidths = [
+      { wch: 14 }, // 关联版本号
       { wch: 12 }, // 版本号
       { wch: 18 }, // 固件版本号
       { wch: 15 }, // 关联PR/CR
@@ -64,6 +67,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
       { wch: 12 }, // 系统回归
       { wch: 20 }, // 测试周期
       { wch: 25 }, // 原型来源
+      { wch: 24 }, // 测试结果Excel
       { wch: 20 }, // 备注
       { wch: 18 }, // 创建时间
       { wch: 18 }, // 更新时间
@@ -85,6 +89,7 @@ export const exportToCSV = (records: VersionRecord[], filename: string) => {
   try {
     // 准备数据
     const data = records.map((record) => ({
+      关联版本号: record.parentVersion || record.versionNumber,
       版本号: record.versionNumber,
       固件版本号: record.firmwareVersion || '',
       关联PR_CR: record.linkedIssues?.join('; ') || '',
@@ -97,6 +102,7 @@ export const exportToCSV = (records: VersionRecord[], filename: string) => {
       系统回归: record.systemRegressionResult,
       测试周期: record.testCycle || '',
       原型来源: record.prototypeSource || '',
+      测试结果Excel: record.testResultFileName || '',
       备注: record.notes || '',
       创建时间: new Date(record.createdAt).toLocaleString('zh-CN'),
       更新时间: new Date(record.updatedAt).toLocaleString('zh-CN'),

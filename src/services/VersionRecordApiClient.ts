@@ -65,3 +65,13 @@ export async function apiUpdateVersionRecord(id: string, data: Partial<VersionRe
 export async function apiDeleteVersionRecord(id: string): Promise<void> {
   await apiFetch(`/api/version-records/${id}`, { method: 'DELETE' });
 }
+
+export interface ParentVersionInfo {
+  id: string;
+  versionNumber: string;
+  projectType?: string;
+}
+
+export async function apiGetVersionRecordParentVersions(): Promise<ParentVersionInfo[]> {
+  return apiFetch<ParentVersionInfo[]>('/api/version-records/parent-versions');
+}

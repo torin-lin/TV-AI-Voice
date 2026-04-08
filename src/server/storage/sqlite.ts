@@ -35,6 +35,7 @@ export function initSqlite(): void {
   db.exec(`CREATE TABLE IF NOT EXISTS release_notes (
     id TEXT PRIMARY KEY,
     version TEXT NOT NULL,
+    parentVersion TEXT DEFAULT '',
     branch TEXT NOT NULL DEFAULT '',
     commitHash TEXT,
     commitMessage TEXT,
@@ -60,6 +61,7 @@ export function initSqlite(): void {
   db.exec(`CREATE TABLE IF NOT EXISTS version_records (
     id TEXT PRIMARY KEY,
     versionNumber TEXT NOT NULL,
+    parentVersion TEXT DEFAULT '',
     firmwareVersion TEXT,
     linkedIssues TEXT DEFAULT '[]',
     changeDescription TEXT NOT NULL DEFAULT '',
@@ -74,6 +76,9 @@ export function initSqlite(): void {
     prototypeFileName TEXT,
     prototypeFilePath TEXT,
     prototypeFileSize INTEGER,
+    testResultFileName TEXT,
+    testResultFilePath TEXT,
+    testResultFileSize INTEGER,
     languageModel TEXT,
     notes TEXT,
     createdAt INTEGER NOT NULL,
@@ -92,6 +97,7 @@ export function initSqlite(): void {
     status TEXT NOT NULL DEFAULT '开放',
     linkedQaProblems TEXT DEFAULT '[]',
     projectType TEXT,
+    issueCreatedAt TEXT DEFAULT '',
     notes TEXT,
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL
@@ -103,6 +109,8 @@ export function initSqlite(): void {
     versionRecordId TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
+    precondition TEXT DEFAULT '',
+    testEnvironment TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT '待处理',
     severity TEXT NOT NULL DEFAULT '中',
     linkedPR TEXT,
@@ -110,7 +118,32 @@ export function initSqlite(): void {
     assignee TEXT,
     resolution TEXT,
     attachments TEXT DEFAULT '[]',
+    syncedProblemId TEXT DEFAULT '',
     createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  )`);
+
+  // 知识库 - 测试用例表
+  db.exec(`CREATE TABLE IF NOT EXISTS test_cases (
+    id TEXT PRIMARY KEY,
+    caseId TEXT NOT NULL DEFAULT '',
+    caseName TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    steps TEXT DEFAULT '[]',
+    expectedResult TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    module TEXT DEFAULT '',
+    priority TEXT NOT NULL DEFAULT '中',
+    projectType TEXT,
+    tags TEXT DEFAULT '[]',
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  )`);
+
+  // 系统设置表（存储 token 等配置）
+  db.exec(`CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '',
     updatedAt INTEGER NOT NULL
   )`);
 
@@ -124,11 +157,30 @@ export function initSqlite(): void {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_status ON customer_problems(status)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vi_versionRecordId ON version_issues(versionRecordId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vi_createdAt ON version_issues(createdAt)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_category ON test_cases(category)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_projectType ON test_cases(projectType)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_createdAt ON test_cases(createdAt)`);
 
-  // 增量迁移：给 version_issues 添加 attachments 列（兼容已有数据库）
-  try {
-    db.exec(`ALTER TABLE version_issues ADD COLUMN attachments TEXT DEFAULT '[]'`);
-  } catch { /* 列已存在则忽略 */ }
+  // 增量迁移：给 version_issues 添加新列（兼容已有数据库）
+  try { db.exec(`ALTER TABLE version_issues ADD COLUMN attachments TEXT DEFAULT '[]'`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_issues ADD COLUMN precondition TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_issues ADD COLUMN testEnvironment TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_issues ADD COLUMN syncedProblemId TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE customer_problems ADD COLUMN issueCreatedAt TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  // test_cases 新增 precondition 列
+  try { db.exec(`ALTER TABLE test_cases ADD COLUMN precondition TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  // release_notes 新增 parentVersion 列（大版本/子版本层级）
+  try { db.exec(`ALTER TABLE release_notes ADD COLUMN parentVersion TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  // release_notes 新增 fixedPRs 列（修复PR列表）
+  try { db.exec(`ALTER TABLE release_notes ADD COLUMN fixedPRs TEXT DEFAULT '[]'`); } catch { /* 列已存在 */ }
+  // version_records 新增 parentVersion 和测试结果附件列
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN parentVersion TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFileName TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFilePath TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFileSize INTEGER`); } catch { /* 列已存在 */ }
+
+  // 补列之后再创建依赖新列的索引
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_parentVersion ON version_records(parentVersion)`);
 
   // 迁移旧 JSON 数据
   migrateJsonData();

@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../store';
 import { CustomerProblem } from '../../../types/database';
 import { Button } from '../../../components/common/Button';
 import { Tag } from '../../../components/common/Tag';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
+const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
+const PT_COLOR: Record<string, string> = { TV: 'bg-yellow-100 text-yellow-800', Projector: 'bg-purple-100 text-purple-800', STB: 'bg-green-100 text-green-800' };
 
 interface CustomerProblemsTableProps {
   problems: CustomerProblem[];
@@ -36,6 +40,8 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
 }) => {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const showProjectCol = currentProject === '全部';
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -80,12 +86,13 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 w-8"></th>
+              {showProjectCol && <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">项目</th>}
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">PR号</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">固件版本</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">问题描述</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">分类</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">状态</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">创建时间</th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">问题时间</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">操作</th>
             </tr>
           </thead>
@@ -98,6 +105,7 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
                     <td className="px-3 py-3 text-sm text-gray-500">
                       <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                     </td>
+                    {showProjectCol && <td className="px-3 py-3 text-sm"><Tag variant="primary" className={PT_COLOR[p.projectType || ''] || 'bg-gray-100 text-gray-600'}>{PT_LABEL[p.projectType || ''] || '-'}</Tag></td>}
                     <td className="px-3 py-3 text-sm">
                       {p.issueId ? (
                         <a href={`${ZMIND_BASE_URL}${p.issueId}`} target="_blank" rel="noopener noreferrer"
@@ -121,20 +129,25 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
                       {p.classification ? <Tag variant="primary" className={getClassificationColor(p.classification)}>{p.classification}</Tag> : <span className="text-gray-400">未分类</span>}
                     </td>
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(p.status)}>{p.status}</Tag></td>
-                    <td className="px-3 py-3 text-sm text-gray-600">{new Date(p.createdAt).toLocaleString('zh-CN')}</td>
-                    <td className="px-3 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex gap-1">
+                    <td className="px-3 py-3 text-sm text-gray-600">
+                      {p.issueCreatedAt
+                        ? new Date(p.issueCreatedAt).toLocaleString('zh-CN')
+                        : new Date(p.createdAt).toLocaleString('zh-CN')}
+                      {p.issueCreatedAt && <span className="ml-1 text-xs text-cyan-600" title="来自 zmind PR 创建时间">PR</span>}
+                    </td>
+                    <td className="px-2 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-1 flex-nowrap">
                         {isCustomer && p.linkedQaProblems && p.linkedQaProblems.length > 0 && onViewTimeline && (
-                          <Button onClick={() => onViewTimeline(p)} variant="secondary" size="sm">时间轴</Button>
+                          <Button onClick={() => onViewTimeline(p)} variant="secondary" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''}>时间轴</Button>
                         )}
-                        <Button onClick={() => onEdit(p)} variant="secondary" size="sm">编辑</Button>
-                        <Button onClick={() => onDelete(p.id!)} variant="danger" size="sm">删除</Button>
+                        <Button onClick={() => onEdit(p)} variant="secondary" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''}>编辑</Button>
+                        <Button onClick={() => onDelete(p.id!)} variant="danger" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''}>删除</Button>
                       </div>
                     </td>
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-100/30">
-                      <td colSpan={8} className="px-6 py-4">
+                      <td colSpan={showProjectCol ? 9 : 8} className="px-6 py-4">
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm overflow-hidden">
                           <div className="col-span-2 min-w-0">
                             <span className="text-gray-500">问题描述：</span>
@@ -147,6 +160,14 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
                           <div className="min-w-0">
                             <span className="text-gray-500">项目类型：</span>
                             <p className="text-gray-900 mt-1">{p.projectType || '-'}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-gray-500">问题时间（追责依据）：</span>
+                            <p className="text-gray-900 mt-1">
+                              {p.issueCreatedAt
+                                ? `${new Date(p.issueCreatedAt).toLocaleString('zh-CN')}（PR创建时间）`
+                                : `${new Date(p.createdAt).toLocaleString('zh-CN')}（提交时间）`}
+                            </p>
                           </div>
                           {isCustomer && (
                             <div className="col-span-2 min-w-0">

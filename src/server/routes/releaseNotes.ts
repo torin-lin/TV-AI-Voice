@@ -21,6 +21,7 @@ export function setupReleaseNoteRoutes(app: any): void {
   /**
    * GET /api/release-notes
    * 查询列表（支持筛选和分页）
+   * 返回树形结构：大版本（parentVersion 为空）+ 子版本
    */
   app.get('/api/release-notes', (req: any, res: any) => {
     try {
@@ -33,6 +34,7 @@ export function setupReleaseNoteRoutes(app: any): void {
         projectGroup,
         startDate,
         endDate,
+        flat,
       } = req.query;
 
       let filtered = [...getAllRecords()];
@@ -54,14 +56,73 @@ export function setupReleaseNoteRoutes(app: any): void {
 
       filtered.sort((a: any, b: any) => b.createdAt - a.createdAt);
 
+      // 如果请求 flat 模式，返回扁平列表（兼容旧逻辑）
+      if (flat === 'true') {
+        const p = Math.max(1, Number(page));
+        const ps = Math.max(1, Number(pageSize));
+        const total = filtered.length;
+        const totalPages = Math.ceil(total / ps);
+        const offset = (p - 1) * ps;
+        const data = filtered.slice(offset, offset + ps);
+        return res.json({ success: true, data: { data, total, page: p, pageSize: ps, totalPages } });
+      }
+
+      // 树形模式：大版本在前，子版本挂在大版本下
+      // 大版本 = parentVersion 为空或不存在的记录
+      const parentRecords = filtered.filter((r: any) => !r.parentVersion);
+      const childRecords = filtered.filter((r: any) => !!r.parentVersion);
+
+      // 按大版本号分组子版本
+      const childMap = new Map<string, any[]>();
+      for (const c of childRecords) {
+        const pv = c.parentVersion;
+        if (!childMap.has(pv)) childMap.set(pv, []);
+        childMap.get(pv)!.push(c);
+      }
+
+      // 构建树形数据：大版本 + children
+      const treeData = parentRecords.map((p: any) => ({
+        ...p,
+        children: (childMap.get(p.version) || []).sort((a: any, b: any) => b.createdAt - a.createdAt),
+      }));
+
+      // 处理孤儿子版本（parentVersion 指向的大版本不存在）
+      const parentVersionSet = new Set(parentRecords.map((p: any) => p.version));
+      for (const [pv, children] of childMap.entries()) {
+        if (!parentVersionSet.has(pv)) {
+          // 把孤儿子版本当作独立记录
+          for (const c of children) treeData.push({ ...c, children: [] });
+        }
+      }
+
+      treeData.sort((a: any, b: any) => b.createdAt - a.createdAt);
+
       const p = Math.max(1, Number(page));
       const ps = Math.max(1, Number(pageSize));
-      const total = filtered.length;
+      const total = treeData.length;
       const totalPages = Math.ceil(total / ps);
       const offset = (p - 1) * ps;
-      const data = filtered.slice(offset, offset + ps);
+      const data = treeData.slice(offset, offset + ps);
 
       res.json({ success: true, data: { data, total, page: p, pageSize: ps, totalPages } });
+    } catch (error) {
+      res.status(500).json({ success: false, message: (error as Error).message });
+    }
+  });
+
+  /**
+   * GET /api/release-notes/parent-versions
+   * 获取所有大版本号列表（供子版本选择父版本用）
+   */
+  app.get('/api/release-notes/parent-versions', (req: any, res: any) => {
+    try {
+      const { projectType } = req.query;
+      let all = getAllRecords().filter((r: any) => !r.parentVersion);
+      if (projectType) all = all.filter((r: any) => r.projectType === projectType);
+      const versions = all
+        .sort((a: any, b: any) => b.createdAt - a.createdAt)
+        .map((r: any) => ({ version: r.version, projectType: r.projectType, id: r.id }));
+      res.json({ success: true, data: versions });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
     }

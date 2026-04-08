@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from '../../../store';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../../../store';
 import { CustomerProblem } from '../../../types/database';
 import { createProblem, updateProblem } from '../store/customerProblemsSlice';
 import CustomerProblemForm from './CustomerProblemForm';
@@ -17,7 +17,11 @@ const CustomerProblemModal: React.FC<CustomerProblemModalProps> = ({
   onClose,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const [loading, setLoading] = useState(false);
+
+  const projectTypeMap: Record<string, string> = { 'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB' };
+  const defaultProjectType = projectTypeMap[currentProject] || 'TV';
 
   const handleSubmit = async (data: Partial<CustomerProblem>) => {
     setLoading(true);
@@ -50,6 +54,7 @@ const CustomerProblemModal: React.FC<CustomerProblemModalProps> = ({
           <CustomerProblemForm
             problem={problem}
             problemType={problemType}
+            defaultProjectType={defaultProjectType}
             onSubmit={handleSubmit}
             onCancel={onClose}
             loading={loading}

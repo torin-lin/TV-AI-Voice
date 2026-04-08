@@ -152,46 +152,44 @@ const CustomerProblemsPage: React.FC = () => {
                 <button onClick={() => setTimelineTarget(null)} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
               </div>
               <div className="space-y-4">
-                {/* 客户问题 */}
-                <div className="flex gap-3">
-                  <div className="flex flex-col items-center">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    <div className="w-0.5 flex-1 bg-gray-200"></div>
-                  </div>
-                  <div className="pb-4">
-                    <p className="text-sm font-medium text-gray-900">客户问题</p>
-                    <p className="text-sm text-gray-600">{timelineTarget.description}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {new Date(timelineTarget.createdAt).toLocaleString('zh-CN')}
-                      {timelineTarget.issueId && (
-                        <> · <a href={`${ZMIND_BASE_URL}${timelineTarget.issueId}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">PR#{timelineTarget.issueId}</a></>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                {/* 关联的QA问题 */}
-                {(timelineTarget.linkedQaProblems || []).map((qaId) => {
-                  const qa = qaItems.find((q) => q.id === qaId);
-                  if (!qa) return null;
-                  return (
-                    <div key={qaId} className="flex gap-3">
+                {(() => {
+                  // 收集所有时间轴节点并按时间排序
+                  const getTime = (item: any) => {
+                    if (item.issueCreatedAt) return new Date(item.issueCreatedAt).getTime();
+                    return item.createdAt;
+                  };
+                  const formatTime = (item: any) => {
+                    if (item.issueCreatedAt) return new Date(item.issueCreatedAt).toLocaleString('zh-CN');
+                    return new Date(item.createdAt).toLocaleString('zh-CN');
+                  };
+                  const nodes: { type: string; item: any; time: number; color: string }[] = [];
+                  nodes.push({ type: '客户问题', item: timelineTarget, time: getTime(timelineTarget), color: 'bg-blue-500' });
+                  (timelineTarget.linkedQaProblems || []).forEach((qaId: string) => {
+                    const qa = qaItems.find((q) => q.id === qaId);
+                    if (qa) nodes.push({ type: 'QA问题', item: qa, time: getTime(qa), color: 'bg-purple-500' });
+                  });
+                  nodes.sort((a, b) => a.time - b.time);
+
+                  return nodes.map((node, idx) => (
+                    <div key={node.item.id || idx} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                        <div className="w-0.5 flex-1 bg-gray-200"></div>
+                        <div className={`w-3 h-3 ${node.color} rounded-full`}></div>
+                        {idx < nodes.length - 1 && <div className="w-0.5 flex-1 bg-gray-200"></div>}
                       </div>
                       <div className="pb-4">
-                        <p className="text-sm font-medium text-gray-900">QA问题</p>
-                        <p className="text-sm text-gray-600">{qa.description}</p>
+                        <p className="text-sm font-medium text-gray-900">{node.type}</p>
+                        <p className="text-sm text-gray-600">{node.item.description}</p>
                         <p className="text-xs text-gray-400 mt-1">
-                          {new Date(qa.createdAt).toLocaleString('zh-CN')}
-                          {qa.issueId && (
-                            <> · <a href={`${ZMIND_BASE_URL}${qa.issueId}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">PR#{qa.issueId}</a></>
+                          {formatTime(node.item)}
+                          {node.item.issueCreatedAt && <span className="ml-1 text-cyan-600">PR时间</span>}
+                          {node.item.issueId && (
+                            <> · <a href={`${ZMIND_BASE_URL}${node.item.issueId}`} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">PR#{node.item.issueId}</a></>
                           )}
                         </p>
                       </div>
                     </div>
-                  );
-                })}
+                  ));
+                })()}
               </div>
             </div>
           </div>

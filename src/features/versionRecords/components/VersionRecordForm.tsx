@@ -6,9 +6,11 @@ import { Select } from '../../../components/common/Select';
 import { Textarea } from '../../../components/common/Textarea';
 import { uploadDoc, getDocDownloadUrl, DocUploadResult } from '../../../services/DocUploadService';
 import { formatFileSize } from '../../../services/ApkUploadService';
+import { apiGetVersionRecordParentVersions, ParentVersionInfo } from '../../../services/VersionRecordApiClient';
 
 interface VersionRecordFormProps {
   record?: VersionRecord | null;
+  defaultProjectType?: string;
   onSubmit: (data: Partial<VersionRecord>) => void;
   onCancel: () => void;
   loading?: boolean;
@@ -121,7 +123,7 @@ const LinkedIssuesInput: React.FC<{
   );
 };
 
-const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit, onCancel, loading = false }) => {
+const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultProjectType, onSubmit, onCancel, loading = false }) => {
   const [formData, setFormData] = useState<Partial<VersionRecord>>({
     versionNumber: '',
     firmwareVersion: '',
@@ -132,7 +134,7 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit,
     smokeTestResult: '未测试',
     voiceRegressionResult: '未测试',
     systemRegressionResult: '未测试',
-    projectType: 'TV',
+    projectType: (defaultProjectType as any) || 'TV',
     testCycle: '',
     prototypeSource: '',
     languageModel: '',
@@ -143,8 +145,16 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit,
   const [docUploading, setDocUploading] = useState(false);
   const [docUploadError, setDocUploadError] = useState('');
   const docInputRef = useRef<HTMLInputElement>(null);
+  const [resultFile, setResultFile] = useState<File | null>(null);
+  const [resultUploading, setResultUploading] = useState(false);
+  const [resultUploadError, setResultUploadError] = useState('');
+  const resultInputRef = useRef<HTMLInputElement>(null);
+  const [parentVersions, setParentVersions] = useState<ParentVersionInfo[]>([]);
 
   useEffect(() => { if (record) setFormData(record); }, [record]);
+  useEffect(() => {
+    apiGetVersionRecordParentVersions().then(setParentVersions).catch(() => {});
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -159,25 +169,71 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit,
     e.preventDefault();
     if (!validateForm()) return;
 
-    // 如果有文档文件需要上传
+    const submitAfterUploads = (extraData: Partial<VersionRecord>) => {
+      onSubmit({ ...formData, ...extraData });
+    };
+
+    // 如果有附件需要上传，按顺序上传
     if (docFile) {
       setDocUploading(true);
       setDocUploadError('');
       uploadDoc(docFile).then((result: DocUploadResult) => {
         setDocUploading(false);
         if (result.success && result.data) {
-          onSubmit({
-            ...formData,
+          const nextData: Partial<VersionRecord> = {
             prototypeFileName: result.data.fileName,
             prototypeFilePath: result.data.filePath,
             prototypeFileSize: result.data.fileSize,
-          });
+          };
+          if (resultFile) {
+            setResultUploading(true);
+            setResultUploadError('');
+            uploadDoc(resultFile).then((resultDoc: DocUploadResult) => {
+              setResultUploading(false);
+              if (resultDoc.success && resultDoc.data) {
+                submitAfterUploads({
+                  ...nextData,
+                  testResultFileName: resultDoc.data.fileName,
+                  testResultFilePath: resultDoc.data.filePath,
+                  testResultFileSize: resultDoc.data.fileSize,
+                });
+              } else {
+                setResultUploadError(resultDoc.message || '测试结果上传失败');
+              }
+            }).catch((err) => {
+              setResultUploading(false);
+              setResultUploadError((err as Error).message || '测试结果上传失败');
+            });
+            return;
+          }
+          submitAfterUploads(nextData);
         } else {
           setDocUploadError(result.message || '文档上传失败');
         }
       }).catch((err) => {
         setDocUploading(false);
         setDocUploadError((err as Error).message || '文档上传失败');
+      });
+      return;
+    }
+
+    if (resultFile) {
+      setResultUploading(true);
+      setResultUploadError('');
+      uploadDoc(resultFile).then((result: DocUploadResult) => {
+        setResultUploading(false);
+        if (result.success && result.data) {
+          submitAfterUploads({
+            testResultFileName: result.data.fileName,
+            testResultFilePath: result.data.filePath,
+            testResultFileSize: result.data.fileSize,
+          });
+        } else {
+          setResultUploadError(result.message || '测试结果上传失败');
+        }
+      }).catch((err) => {
+        setResultUploading(false);
+        setResultUploadError((err as Error).message || '测试结果上传失败');
       });
       return;
     }
@@ -197,6 +253,27 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit,
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">版本号 <span className="text-red-500">*</span></label>
         <Input type="text" name="versionNumber" value={formData.versionNumber || ''} onChange={handleInputChange} placeholder="例如: v1.0.0" error={errors.versionNumber} />
+      </div>
+
+      {/* 关联主版本号 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">关联版本号</label>
+        <select
+          name="parentVersion"
+          value={formData.parentVersion || ''}
+          onChange={handleInputChange}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">无（自身为主版本）</option>
+          {parentVersions
+            .filter((pv) => !record?.id || pv.id !== record.id)
+            .map((pv) => (
+              <option key={pv.id} value={pv.versionNumber}>
+                {pv.versionNumber}{pv.projectType ? ` (${pv.projectType})` : ''}
+              </option>
+            ))}
+        </select>
+        <p className="text-xs text-gray-400 mt-1">用于把同一个版本下不同固件的测试记录聚合展示</p>
       </div>
 
       {/* 项目类型 */}
@@ -327,6 +404,64 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit,
         <input ref={docInputRef} type="file" onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (f.size > 100 * 1024 * 1024) { setDocUploadError('文件大小不能超过 100MB'); return; } setDocFile(f); setDocUploadError(''); } }} className="hidden" />
       </div>
 
+      {/* 测试结果 Excel */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">测试结果 Excel</label>
+
+        {formData.testResultFileName && !resultFile && (
+          <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg mt-2">
+            <div className="flex-1 min-w-0">
+              <a href={getDocDownloadUrl(formData.testResultFilePath!)} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-emerald-800 hover:underline truncate block">
+                {formData.testResultFileName}
+              </a>
+              <p className="text-xs text-emerald-600">{formData.testResultFileSize ? formatFileSize(formData.testResultFileSize) : ''}</p>
+            </div>
+            <button type="button" onClick={() => setFormData((prev) => ({ ...prev, testResultFileName: undefined, testResultFilePath: undefined, testResultFileSize: undefined }))} className="text-red-500 hover:text-red-700 text-sm">移除</button>
+          </div>
+        )}
+
+        {resultFile && (
+          <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg mt-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-800 truncate">{resultFile.name}</p>
+              <p className="text-xs text-amber-700">{formatFileSize(resultFile.size)} · 待上传</p>
+            </div>
+            <button type="button" onClick={() => { setResultFile(null); setResultUploadError(''); if (resultInputRef.current) resultInputRef.current.value = ''; }} className="text-red-500 hover:text-red-700 text-sm">移除</button>
+          </div>
+        )}
+
+        {resultUploadError && <p className="text-red-500 text-sm mt-1">{resultUploadError}</p>}
+
+        {!resultFile && !formData.testResultFileName && (
+          <div className="mt-2">
+            <button type="button" onClick={() => resultInputRef.current?.click()}
+              className="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-sm hover:bg-blue-100 hover:border-blue-400 hover:text-blue-600 transition-colors">
+              上传测试结果
+            </button>
+            <span className="text-gray-400 text-xs ml-2">支持 Excel/CSV，最大 100MB</span>
+          </div>
+        )}
+        <input
+          ref={resultInputRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) {
+              if (f.size > 100 * 1024 * 1024) { setResultUploadError('文件大小不能超过 100MB'); return; }
+              const lower = f.name.toLowerCase();
+              if (!lower.endsWith('.xlsx') && !lower.endsWith('.xls') && !lower.endsWith('.csv')) {
+                setResultUploadError('只允许上传 Excel 或 CSV 文件');
+                return;
+              }
+              setResultFile(f);
+              setResultUploadError('');
+            }
+          }}
+          className="hidden"
+        />
+      </div>
+
       {/* 备注 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
@@ -335,8 +470,10 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, onSubmit,
 
       {/* 按钮 */}
       <div className="flex gap-3 justify-end pt-4">
-        <Button onClick={onCancel} variant="secondary" disabled={loading || docUploading}>取消</Button>
-        <Button type="submit" variant="primary" disabled={loading || docUploading}>{docUploading ? '上传文档中...' : loading ? '保存中...' : '保存'}</Button>
+        <Button onClick={onCancel} variant="secondary" disabled={loading || docUploading || resultUploading}>取消</Button>
+        <Button type="submit" variant="primary" disabled={loading || docUploading || resultUploading}>
+          {docUploading ? '上传原型中...' : resultUploading ? '上传测试结果中...' : loading ? '保存中...' : '保存'}
+        </Button>
       </div>
     </form>
   );

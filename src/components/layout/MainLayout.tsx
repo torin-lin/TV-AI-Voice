@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 import { Button } from '../common/Button';
 import ProjectSwitcher from './ProjectSwitcher';
 
@@ -14,6 +16,8 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const sidebarTitle = currentProject === '全部' ? 'AI Voice' : currentProject;
 
   // 导航菜单项
   const menuItems = [
@@ -22,7 +26,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     { path: '/release-notes', label: 'Release Note', icon: '📋' },
     { path: '/customer-problems', label: '问题追踪', icon: '🐛' },
     { path: '/voice-records', label: '语音记录', icon: '🎤' },
-    { path: '/recommendations', label: 'AI 推荐', icon: '🤖' },
+    { path: '/recommendations', label: '知识库', icon: '📚' },
+    { path: '/alias-test', label: '别名管理测试', icon: '🏷️' },
     { path: '/settings', label: '设置', icon: '⚙️' },
   ];
 
@@ -41,7 +46,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         <div className="p-4 border-b border-blue-400/30">
           <div className="flex items-center justify-between">
             <div className={`${!sidebarOpen && 'hidden'} text-xl font-bold`}>
-              TV AI Voice
+              {sidebarTitle}
             </div>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}

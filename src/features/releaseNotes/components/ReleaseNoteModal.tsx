@@ -10,6 +10,7 @@ import ReleaseNoteForm from './ReleaseNoteForm';
 
 interface ReleaseNoteModalProps {
   record?: ReleaseNote | null;
+  defaultParentVersion?: string;
   onClose: () => void;
 }
 
@@ -17,9 +18,13 @@ interface ReleaseNoteModalProps {
  * Release Note 模态框组件
  * 用于添加和编辑 Release Note
  */
-const ReleaseNoteModal: React.FC<ReleaseNoteModalProps> = ({ record, onClose }) => {
+const ReleaseNoteModal: React.FC<ReleaseNoteModalProps> = ({ record, defaultParentVersion, onClose }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { loading } = useSelector((state: RootState) => state.releaseNotes);
+  const currentProject = useSelector((state: RootState) => state.project.currentProject);
+
+  const projectTypeMap: Record<string, string> = { 'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB' };
+  const defaultProjectType = projectTypeMap[currentProject] || 'TV';
 
   // 处理表单提交
   const handleSubmit = async (data: Partial<ReleaseNote>) => {
@@ -50,7 +55,7 @@ const ReleaseNoteModal: React.FC<ReleaseNoteModalProps> = ({ record, onClose }) 
         {/* 标题 */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-900">
-            {record ? '编辑 Release Note' : '添加新 Release Note'}
+            {record ? '编辑 Release Note' : defaultParentVersion ? `添加子版本（${defaultParentVersion}）` : '添加新 Release Note'}
           </h2>
           <button
             onClick={onClose}
@@ -64,6 +69,8 @@ const ReleaseNoteModal: React.FC<ReleaseNoteModalProps> = ({ record, onClose }) 
         <div className="p-6">
           <ReleaseNoteForm
             record={record}
+            defaultProjectType={defaultProjectType}
+            defaultParentVersion={defaultParentVersion}
             onSubmit={handleSubmit}
             onCancel={onClose}
             loading={loading}

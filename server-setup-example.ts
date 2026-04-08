@@ -23,6 +23,8 @@ import { setupZmindProxyRoutes } from './src/server/routes/zmindProxy';
 import { setupVersionIssueRoutes } from './src/server/routes/versionIssues';
 import { setupIssueAttachmentRoutes } from './src/server/routes/issueAttachments';
 import { setupVersionRecordRoutes } from './src/server/routes/versionRecords';
+import { setupKnowledgeBaseRoutes } from './src/server/routes/knowledgeBase';
+import { setupAliasTestRoutes } from './src/server/routes/aliasTest';
 import { initSqlite, closeSqlite } from './src/server/storage/sqlite';
 
 // 加载环境变量
@@ -69,6 +71,12 @@ setupIssueAttachmentRoutes(app);
 
 // 设置版本记录路由
 setupVersionRecordRoutes(app);
+
+// 设置知识库路由
+setupKnowledgeBaseRoutes(app);
+
+// 设置别名管理测试路由
+setupAliasTestRoutes(app);
 
 // 健康检查端点
 app.get('/health', (_req: Request, res: Response) => {

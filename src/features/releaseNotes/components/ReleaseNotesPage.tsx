@@ -33,6 +33,7 @@ const ReleaseNotesPage: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ReleaseNote | null>(null);
+  const [defaultParentVersion, setDefaultParentVersion] = useState('');
   
 
   // 初始化加载数据
@@ -48,6 +49,14 @@ const ReleaseNotesPage: React.FC = () => {
   // 处理添加新记录
   const handleAddRecord = () => {
     setEditingRecord(null);
+    setDefaultParentVersion('');
+    setIsModalOpen(true);
+  };
+
+  // 处理添加子版本
+  const handleAddChild = (parentVersion: string, _projectType?: string) => {
+    setEditingRecord(null);
+    setDefaultParentVersion(parentVersion);
     setIsModalOpen(true);
   };
 
@@ -147,13 +156,15 @@ const ReleaseNotesPage: React.FC = () => {
           onDelete={handleDeleteRecord}
           onPaginationChange={handlePaginationChange}
           onSortingChange={handleSortingChange}
+          onAddChild={handleAddChild}
         />
 
         {/* 模态框 */}
         {isModalOpen && (
           <ReleaseNoteModal
             record={editingRecord}
-            onClose={() => setIsModalOpen(false)}
+            defaultParentVersion={defaultParentVersion}
+            onClose={() => { setIsModalOpen(false); setDefaultParentVersion(''); }}
           />
         )}
       </div>

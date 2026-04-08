@@ -32,6 +32,15 @@ export function findById(id: string): VersionRecord | undefined {
   return row ? rowToRecord(row) : undefined;
 }
 
+export function getParentVersions(): Array<{ id: string; versionNumber: string; projectType?: string }> {
+  return getDb().prepare(
+    `SELECT id, versionNumber, projectType
+     FROM version_records
+     WHERE COALESCE(parentVersion, '') = ''
+     ORDER BY createdAt DESC`
+  ).all() as Array<{ id: string; versionNumber: string; projectType?: string }>;
+}
+
 export function create(data: Omit<VersionRecord, 'id' | 'createdAt' | 'updatedAt'>): string {
   const id = generateId('vr');
   const now = Date.now();

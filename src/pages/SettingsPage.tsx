@@ -3,72 +3,55 @@ import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Card } from '../components/common/Card';
 
-/**
- * 设置页面
- * 配置 API Key 和数据管理
- */
 const SettingsPage: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [endpoint, setEndpoint] = useState('');
+  const [modelName, setModelName] = useState('');
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
 
-  // 初始化加载设置
   useEffect(() => {
-    const savedKey = localStorage.getItem('azure_openai_api_key') || '';
-    const savedEndpoint =
-      localStorage.getItem('azure_openai_endpoint') ||
-      'https://your-resource.openai.azure.com/openai/deployments/gpt-35-turbo/chat/completions?api-version=2024-02-15-preview';
-    setApiKey(savedKey);
-    setEndpoint(savedEndpoint);
+    setApiKey(localStorage.getItem('azure_openai_api_key') || '');
+    setEndpoint(localStorage.getItem('azure_openai_endpoint') || 'https://fz-test-qa.openai.azure.com/openai/v1/chat/completions');
+    setModelName(localStorage.getItem('azure_openai_model') || 'gpt-5');
   }, []);
 
-  // 保存设置
-  const handleSaveSettings = () => {
+  const handleSave = () => {
     localStorage.setItem('azure_openai_api_key', apiKey);
     localStorage.setItem('azure_openai_endpoint', endpoint);
+    localStorage.setItem('azure_openai_model', modelName);
     alert('设置已保存');
   };
 
-  // 测试连接
-  const handleTestConnection = async () => {
+  const handleTest = async () => {
     setTestLoading(true);
     setTestResult(null);
-
     try {
       if (!apiKey) { setTestResult('❌ 请先输入 API Key'); return; }
-      if (!endpoint) { setTestResult('❌ 请先输入 API 端点'); return; }
-      if (!endpoint.includes('/deployments/')) {
-        setTestResult('❌ API 端点格式不正确，应包含 /deployments/ 路径');
-        return;
-      }
+      if (!endpoint) { setTestResult('❌ 请先输入端点地址'); return; }
 
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'api-key': apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          model: modelName || undefined,
           messages: [{ role: 'user', content: '你好' }],
-          max_tokens: 10,
-          temperature: 0.7,
+          max_completion_tokens: 10,
+          temperature: 1,
         }),
       });
 
-      const responseData = await response.json();
-
+      const data = await response.json();
       if (response.ok) {
-        setTestResult('✅ 连接成功');
+        const model = data?.model || '';
+        const reply = data?.choices?.[0]?.message?.content || '';
+        setTestResult(`✅ 连接成功${model ? ` (模型: ${model})` : ''}${reply ? `\n回复: ${reply}` : ''}`);
       } else {
-        const errorMessage = responseData?.error?.message || response.statusText;
-        if (errorMessage.includes('does not exist')) {
-          setTestResult(`❌ 部署不存在: 请检查部署名称是否正确。\n错误: ${errorMessage}`);
-        } else if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
-          setTestResult('❌ API Key 无效或已过期，请检查 API Key');
-        } else {
-          setTestResult(`❌ 连接失败: ${errorMessage}`);
-        }
+        const msg = data?.error?.message || response.statusText;
+        setTestResult(`❌ 连接失败 (${response.status}): ${msg}`);
       }
     } catch (error) {
-      setTestResult(`❌ 错误: ${(error as Error).message}`);
+      setTestResult(`❌ 网络错误: ${(error as Error).message}`);
     } finally {
       setTestLoading(false);
     }
@@ -77,7 +60,6 @@ const SettingsPage: React.FC = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-4xl mx-auto">
-        {/* 页面标题 */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">设置</h1>
           <p className="text-gray-600 mt-2">配置应用和管理数据</p>
@@ -88,41 +70,36 @@ const SettingsPage: React.FC = () => {
           <h2 className="text-xl font-bold text-gray-900 mb-4">Azure OpenAI 配置</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-              <Input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="输入你的 Azure OpenAI API Key"
-              />
-              <p className="text-xs text-gray-500 mt-1">API Key 仅保存在本地浏览器中，不会上传到服务器</p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">API 端点</label>
+              <Input type="text" value={endpoint} onChange={(e) => setEndpoint(e.target.value)}
+                placeholder="https://fz-test-qa.openai.azure.com/openai/v1/chat/completions" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">API 端点</label>
-              <Input
-                type="text"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                placeholder="https://your-resource.openai.azure.com/openai/deployments/gpt-35-turbo/chat/completions?api-version=2024-02-15-preview"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                格式: https://&lt;resource-name&gt;.openai.azure.com/openai/deployments/&lt;deployment-id&gt;/chat/completions?api-version=2024-02-15-preview
-              </p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
+              <Input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)}
+                placeholder="gpt-5" />
+              <p className="text-xs text-gray-500 mt-1">请求 body 中的 model 字段</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+              <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                placeholder="输入你的 API Key" />
+              <p className="text-xs text-gray-500 mt-1">API Key 仅保存在本地浏览器中</p>
             </div>
 
             <div className="flex gap-3">
-              <Button onClick={handleSaveSettings} variant="primary">保存设置</Button>
-              <Button onClick={handleTestConnection} variant="secondary" disabled={testLoading}>
+              <Button onClick={handleSave} variant="primary">保存设置</Button>
+              <Button onClick={handleTest} variant="secondary" disabled={testLoading}>
                 {testLoading ? '测试中...' : '测试连接'}
               </Button>
             </div>
 
             {testResult && (
-              <div className={`p-3 rounded-lg whitespace-pre-wrap ${
-                testResult.includes('✅')
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'bg-red-50 text-red-700 border border-red-200'
+              <div className={`p-3 rounded-lg whitespace-pre-wrap text-sm ${
+                testResult.includes('✅') ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'bg-red-50 text-red-700 border border-red-200'
               }`}>
                 {testResult}
               </div>

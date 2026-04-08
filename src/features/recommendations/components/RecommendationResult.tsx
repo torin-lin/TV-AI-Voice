@@ -1,118 +1,80 @@
 import React from 'react';
-import { Recommendation } from '../store/recommendationsSlice';
-import { Tag } from '../../../components/common/Tag';
+import { KBRecommendation } from '../../../types/database';
 
-interface RecommendationResultProps {
-  recommendation: Recommendation;
+interface Props {
+  recommendation: KBRecommendation;
 }
 
-/**
- * 推荐结果显示组件
- * 显示 AI 生成的推荐结果
- */
-const RecommendationResult: React.FC<RecommendationResultProps> = ({
-  recommendation,
-}) => {
-  // 获取风险等级的颜色
-  const getRiskLevelColor = (level: string) => {
-    switch (level) {
-      case '低':
-        return 'bg-green-100 text-green-800';
-      case '中':
-        return 'bg-yellow-100 text-yellow-800';
-      case '高':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+const SCORE_COLOR = (s: number) => s >= 20 ? 'bg-red-100 text-red-700' : s >= 10 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600';
 
+const RecommendationResult: React.FC<Props> = ({ recommendation: rec }) => {
   return (
     <div className="space-y-4">
-      {/* 版本信息 */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-sm text-gray-600">版本号</p>
-          <p className="text-lg font-semibold text-gray-900">
-            {recommendation.versionNumber}
-          </p>
+      {/* 测试计划摘要 */}
+      <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-5 border border-blue-200">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-lg">📋</span>
+          <h4 className="font-bold text-gray-900">测试计划</h4>
+          {rec.usedAI && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">🤖 AI 分析</span>}
         </div>
-        <div>
-          <p className="text-sm text-gray-600">风险等级</p>
-          <div className="mt-1">
-            <Tag
-              variant="primary"
-              className={getRiskLevelColor(recommendation.riskLevel)}
-            >
-              {recommendation.riskLevel}
-            </Tag>
+        <div className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{rec.testPlanSummary}</div>
+      </div>
+
+      {/* 风险分析 */}
+      {rec.riskAnalysis && (
+        <div className="bg-orange-50 rounded-xl p-5 border border-orange-200">
+          <div className="flex items-center gap-2 mb-3">
+            <span>⚠️</span>
+            <h4 className="font-bold text-gray-900 text-sm">风险分析</h4>
+          </div>
+          <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{rec.riskAnalysis}</div>
+        </div>
+      )}
+
+      {/* 推荐测试用例 */}
+      {rec.recommendedCases.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-5">
+          <h4 className="font-bold text-gray-900 mb-3">🧪 推荐测试用例 ({rec.recommendedCases.length})</h4>
+          <div className="space-y-2">
+            {rec.recommendedCases.map((c, i) => (
+              <div key={i} className="flex items-start gap-3 p-2.5 bg-gray-50 rounded-lg">
+                <span className="text-xs text-gray-400 font-mono mt-0.5 shrink-0 w-5">{i + 1}</span>
+                <span className={`px-2 py-0.5 rounded text-xs font-bold shrink-0 ${SCORE_COLOR(c.score)}`}>{c.score >= 100 ? 'AI' : c.score + '分'}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-gray-900">{c.caseName}</span>
+                  {c.reason && <p className="text-xs text-gray-500 mt-0.5">{c.reason}</p>}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* 修改内容 */}
-      <div>
-        <p className="text-sm text-gray-600 mb-2">修改内容</p>
-        <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">
-          {recommendation.changeDescription}
-        </p>
-      </div>
-
-      {/* 推荐的测试用例 */}
-      <div>
-        <p className="text-sm font-semibold text-gray-900 mb-2">
-          推荐的测试用例
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {recommendation.recommendedTestCases.map((testCase) => (
-            <Tag key={testCase} variant="secondary">
-              {testCase}
-            </Tag>
-          ))}
-        </div>
-      </div>
-
-      {/* 推荐的回归测试 */}
-      <div>
-        <p className="text-sm font-semibold text-gray-900 mb-2">
-          推荐的回归测试
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {recommendation.recommendedRegressions.map((regression) => (
-            <Tag key={regression} variant="secondary">
-              {regression}
-            </Tag>
-          ))}
-        </div>
-      </div>
-
-      {/* 推荐理由 */}
-      <div>
-        <p className="text-sm font-semibold text-gray-900 mb-2">推荐理由</p>
-        <p className="text-gray-700 bg-blue-100 p-3 rounded-lg border border-blue-300">
-          {recommendation.reasoning}
-        </p>
-      </div>
-
-      {/* 置信度 */}
-      <div>
-        <p className="text-sm text-gray-600 mb-2">推荐置信度</p>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-blue-600 to-cyan-500 h-2 rounded-full"
-              style={{ width: `${recommendation.confidence * 100}%` }}
-            ></div>
+      {/* 需要复测的问题 */}
+      {rec.retestIssues.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-5">
+          <h4 className="font-bold text-gray-900 mb-3">🔄 需要复测的问题 ({rec.retestIssues.length})</h4>
+          <div className="space-y-2">
+            {rec.retestIssues.map((r, i) => (
+              <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                <span className={`px-2 py-0.5 rounded text-xs font-bold ${SCORE_COLOR(r.score)}`}>{r.score}分</span>
+                <span className="text-sm text-gray-900 flex-1 truncate">{r.title}</span>
+                <span className="text-xs text-gray-400 max-w-[200px] truncate">{r.reason}</span>
+              </div>
+            ))}
           </div>
-          <span className="text-sm font-semibold text-gray-900 w-12">
-            {(recommendation.confidence * 100).toFixed(0)}%
-          </span>
         </div>
-      </div>
+      )}
 
-      {/* 生成时间 */}
-      <div className="text-xs text-gray-500 pt-2 border-t border-gray-200">
-        生成时间: {new Date(recommendation.createdAt).toLocaleString('zh-CN')}
+      {/* 无匹配 */}
+      {rec.recommendedCases.length === 0 && rec.retestIssues.length === 0 && (
+        <div className="bg-gray-50 rounded-xl p-8 text-center text-gray-400">
+          <p>未匹配到相关用例和问题，建议丰富知识库内容</p>
+        </div>
+      )}
+
+      <div className="text-xs text-gray-400 text-right">
+        生成时间: {new Date(rec.createdAt).toLocaleString('zh-CN')}
       </div>
     </div>
   );

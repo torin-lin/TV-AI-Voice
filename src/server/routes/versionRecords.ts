@@ -8,9 +8,19 @@ import {
   create,
   update,
   remove,
+  getParentVersions,
 } from '../storage/versionRecordStorage';
 
 export function setupVersionRecordRoutes(app: any): void {
+
+  /** GET /api/version-records/parent-versions */
+  app.get('/api/version-records/parent-versions', (_req: any, res: any) => {
+    try {
+      res.json({ success: true, data: getParentVersions() });
+    } catch (error) {
+      res.status(500).json({ success: false, message: (error as Error).message });
+    }
+  });
 
   /** GET /api/version-records - 查询列表 */
   app.get('/api/version-records', (req: any, res: any) => {
