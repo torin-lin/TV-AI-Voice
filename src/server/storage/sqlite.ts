@@ -44,6 +44,7 @@ export function initSqlite(): void {
     affectedModules TEXT DEFAULT '[]',
     changeType TEXT NOT NULL DEFAULT '功能',
     severity TEXT NOT NULL DEFAULT '中',
+    rdSmokeStatus TEXT DEFAULT '未测试',
     testingNotes TEXT,
     regressionRisk TEXT,
     affectedFeatures TEXT DEFAULT '[]',
@@ -60,6 +61,7 @@ export function initSqlite(): void {
   // 版本记录表
   db.exec(`CREATE TABLE IF NOT EXISTS version_records (
     id TEXT PRIMARY KEY,
+    releaseNoteId TEXT,
     versionNumber TEXT NOT NULL,
     parentVersion TEXT DEFAULT '',
     firmwareVersion TEXT,
@@ -80,6 +82,13 @@ export function initSqlite(): void {
     testResultFilePath TEXT,
     testResultFileSize INTEGER,
     languageModel TEXT,
+    versionStatus TEXT DEFAULT '待测试',
+    releaseDecision TEXT DEFAULT '待评估',
+    conclusionSummary TEXT,
+    remainingRisks TEXT,
+    nextActions TEXT,
+    conclusionOwner TEXT,
+    conclusionUpdatedAt INTEGER,
     notes TEXT,
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL
@@ -171,16 +180,26 @@ export function initSqlite(): void {
   try { db.exec(`ALTER TABLE test_cases ADD COLUMN precondition TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
   // release_notes 新增 parentVersion 列（大版本/子版本层级）
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN parentVersion TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE release_notes ADD COLUMN rdSmokeStatus TEXT DEFAULT '未测试'`); } catch { /* 列已存在 */ }
   // release_notes 新增 fixedPRs 列（修复PR列表）
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN fixedPRs TEXT DEFAULT '[]'`); } catch { /* 列已存在 */ }
   // version_records 新增 parentVersion 和测试结果附件列
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN releaseNoteId TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN parentVersion TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFileName TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFilePath TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFileSize INTEGER`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN versionStatus TEXT DEFAULT '待测试'`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN releaseDecision TEXT DEFAULT '待评估'`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN conclusionSummary TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN remainingRisks TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN nextActions TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN conclusionOwner TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN conclusionUpdatedAt INTEGER`); } catch { /* 列已存在 */ }
 
   // 补列之后再创建依赖新列的索引
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_parentVersion ON version_records(parentVersion)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_releaseNoteId ON version_records(releaseNoteId)`);
 
   // 迁移旧 JSON 数据
   migrateJsonData();

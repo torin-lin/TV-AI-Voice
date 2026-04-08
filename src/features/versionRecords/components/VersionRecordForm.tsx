@@ -6,7 +6,8 @@ import { Select } from '../../../components/common/Select';
 import { Textarea } from '../../../components/common/Textarea';
 import { uploadDoc, getDocDownloadUrl, DocUploadResult } from '../../../services/DocUploadService';
 import { formatFileSize } from '../../../services/ApkUploadService';
-import { apiGetVersionRecordParentVersions, ParentVersionInfo } from '../../../services/VersionRecordApiClient';
+import { apiGetEligibleQaReleaseNotes, EligibleQaReleaseNoteInfo } from '../../../services/ReleaseNoteApiClient';
+import { DEFAULT_MODULE_OPTIONS, PROJECT_OPTIONS, RISK_LEVEL_OPTIONS, TEST_RESULT_OPTIONS, VERSION_STATUS_OPTIONS } from '../../../config/dictionaries';
 
 interface VersionRecordFormProps {
   record?: VersionRecord | null;
@@ -16,7 +17,6 @@ interface VersionRecordFormProps {
   loading?: boolean;
 }
 
-const DEFAULT_MODULES = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络', 'Android', 'UI', '数据库'];
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 
 /** 标签输入组件 */
@@ -131,13 +131,13 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
     changeDescription: '',
     modifiedModules: [],
     riskLevel: '中',
-    smokeTestResult: '未测试',
     voiceRegressionResult: '未测试',
     systemRegressionResult: '未测试',
     projectType: (defaultProjectType as any) || 'TV',
     testCycle: '',
     prototypeSource: '',
     languageModel: '',
+    versionStatus: '待测试',
     notes: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -149,15 +149,16 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
   const [resultUploading, setResultUploading] = useState(false);
   const [resultUploadError, setResultUploadError] = useState('');
   const resultInputRef = useRef<HTMLInputElement>(null);
-  const [parentVersions, setParentVersions] = useState<ParentVersionInfo[]>([]);
+  const [eligibleReleaseNotes, setEligibleReleaseNotes] = useState<EligibleQaReleaseNoteInfo[]>([]);
 
   useEffect(() => { if (record) setFormData(record); }, [record]);
   useEffect(() => {
-    apiGetVersionRecordParentVersions().then(setParentVersions).catch(() => {});
-  }, []);
+    apiGetEligibleQaReleaseNotes(record?.projectType || defaultProjectType).then(setEligibleReleaseNotes).catch(() => {});
+  }, [defaultProjectType, record?.projectType]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
+    if (!record?.id && !formData.releaseNoteId) newErrors.releaseNoteId = '请先选择一个 RD 冒烟通过的版本';
     if (!formData.versionNumber?.trim()) newErrors.versionNumber = '版本号不能为空';
     if (!formData.changeDescription?.trim()) newErrors.changeDescription = '修改内容不能为空';
     if (!formData.modifiedModules || formData.modifiedModules.length === 0) newErrors.modifiedModules = '至少选择一个修改模块';
@@ -243,44 +244,82 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === 'releaseNoteId') {
+      const selected = eligibleReleaseNotes.find((item) => item.id === value);
+      if (selected) {
+        setFormData((prev) => ({
+          ...prev,
+          releaseNoteId: selected.id,
+          versionNumber: selected.version,
+          parentVersion: selected.parentVersion || '',
+          projectType: (selected.projectType as VersionRecord['projectType']) || prev.projectType,
+          changeDescription: prev.changeDescription?.trim() ? prev.changeDescription : selected.changeDescription,
+          modifiedModules: prev.modifiedModules && prev.modifiedModules.length > 0 ? prev.modifiedModules : selected.affectedModules,
+          riskLevel: selected.regressionRisk || prev.riskLevel || '中',
+        }));
+      } else {
+        setFormData((prev) => ({ ...prev, releaseNoteId: value || undefined }));
+      }
+      if (errors.releaseNoteId) setErrors((prev) => { const n = { ...prev }; delete n.releaseNoteId; return n; });
+      return;
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors((prev) => { const n = { ...prev }; delete n[name]; return n; });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* 版本号 */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">版本号 <span className="text-red-500">*</span></label>
-        <Input type="text" name="versionNumber" value={formData.versionNumber || ''} onChange={handleInputChange} placeholder="例如: v1.0.0" error={errors.versionNumber} />
-      </div>
+      {formData.releaseNoteId && !eligibleReleaseNotes.some((item) => item.id === formData.releaseNoteId) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          当前记录绑定的是历史 RD 版本，暂未出现在“可新建 QA 记录”的候选列表中。
+        </div>
+      )}
 
-      {/* 关联主版本号 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">关联版本号</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          关联 RD 版本 {!record?.id && <span className="text-red-500">*</span>}
+        </label>
         <select
-          name="parentVersion"
-          value={formData.parentVersion || ''}
+          name="releaseNoteId"
+          value={formData.releaseNoteId || ''}
           onChange={handleInputChange}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="">无（自身为主版本）</option>
-          {parentVersions
-            .filter((pv) => !record?.id || pv.id !== record.id)
-            .map((pv) => (
-              <option key={pv.id} value={pv.versionNumber}>
-                {pv.versionNumber}{pv.projectType ? ` (${pv.projectType})` : ''}
-              </option>
-            ))}
+          <option value="">{record?.id ? '未绑定旧记录，可重新选择' : '请选择 RD 冒烟通过的版本'}</option>
+          {formData.releaseNoteId && !eligibleReleaseNotes.some((item) => item.id === formData.releaseNoteId) && (
+            <option value={formData.releaseNoteId}>
+              {`${formData.versionNumber || '历史版本'}（当前已关联）`}
+            </option>
+          )}
+          {eligibleReleaseNotes.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.version} {item.projectType ? `(${item.projectType})` : ''} - {item.branch} / {item.author}
+            </option>
+          ))}
         </select>
-        <p className="text-xs text-gray-400 mt-1">用于把同一个版本下不同固件的测试记录聚合展示</p>
+        <p className="text-xs text-gray-400 mt-1">QA 版本记录只能基于 RD 冒烟通过的 Release Note 创建。同一个 RD 版本可以创建多条不同固件的测试记录。</p>
+        {errors.releaseNoteId && <p className="text-red-500 text-sm mt-1">{errors.releaseNoteId}</p>}
+      </div>
+
+      {formData.parentVersion && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          <span className="font-medium text-gray-700">所属版本分组：</span>
+          {formData.parentVersion}
+        </div>
+      )}
+
+      {/* 版本号 */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">版本号 <span className="text-red-500">*</span></label>
+        <Input type="text" name="versionNumber" value={formData.versionNumber || ''} onChange={handleInputChange} placeholder="例如: v1.0.0" error={errors.versionNumber} readOnly={Boolean(formData.releaseNoteId)} />
+        {formData.releaseNoteId && <p className="text-xs text-gray-400 mt-1">版本号从关联的 RD 版本自动带出。</p>}
       </div>
 
       {/* 项目类型 */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">项目类型</label>
         <Select name="projectType" value={formData.projectType || 'TV'} onChange={handleInputChange}
-          options={[{ value: 'TV', label: 'TV AI Voice' }, { value: 'Projector', label: 'Projector AI Voice' }, { value: 'STB', label: 'STB AI Voice' }]} />
+          options={[...PROJECT_OPTIONS]} />
       </div>
 
       {/* 固件版本号 */}
@@ -304,7 +343,7 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
       {/* 修改模块 */}
       <TagInput label="修改模块" required tags={formData.modifiedModules || []}
         onChange={(tags) => { setFormData((prev) => ({ ...prev, modifiedModules: tags })); if (errors.modifiedModules) setErrors((prev) => { const n = { ...prev }; delete n.modifiedModules; return n; }); }}
-        suggestions={DEFAULT_MODULES} error={errors.modifiedModules} />
+        suggestions={[...DEFAULT_MODULE_OPTIONS]} error={errors.modifiedModules} />
 
       {/* 语言模型 */}
       <div>
@@ -316,28 +355,35 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">风险等级</label>
         <Select name="riskLevel" value={formData.riskLevel || '中'} onChange={handleInputChange}
-          options={[{ value: '低', label: '低' }, { value: '中', label: '中' }, { value: '高', label: '高' }]} />
+          options={[...RISK_LEVEL_OPTIONS]} />
       </div>
 
-      {/* 冒烟测试结果 */}
+      {/* 版本状态 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">冒烟测试结果</label>
-        <Select name="smokeTestResult" value={formData.smokeTestResult || '未测试'} onChange={handleInputChange}
-          options={[{ value: '未测试', label: '未测试' }, { value: '通过', label: '通过' }, { value: '失败', label: '失败' }]} />
+        <label className="block text-sm font-medium text-gray-700 mb-1">版本状态</label>
+        <Select
+          name="versionStatus"
+          value={formData.versionStatus || '待测试'}
+          onChange={handleInputChange}
+          options={[...VERSION_STATUS_OPTIONS]}
+        />
+        <p className="text-xs text-gray-400 mt-1">建议按 待测试 → 测试中 → 待结论 / 阻塞 → 可发布 → 已发布 的节奏推进</p>
       </div>
 
       {/* 语音回归结果 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">语音回归结果</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">语音功能回归结果</label>
         <Select name="voiceRegressionResult" value={formData.voiceRegressionResult || '未测试'} onChange={handleInputChange}
-          options={[{ value: '未测试', label: '未测试' }, { value: '通过', label: '通过' }, { value: '失败', label: '失败' }]} />
+          options={[...TEST_RESULT_OPTIONS]} />
+        <p className="text-xs text-gray-400 mt-1">用于记录语音主链路能力回归，比如唤醒、ASR、NLU、TTS、多轮对话等。</p>
       </div>
 
-      {/* 系统回归结果 */}
+      {/* 系统集成回归结果 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">系统回归结果</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">系统集成回归结果</label>
         <Select name="systemRegressionResult" value={formData.systemRegressionResult || '未测试'} onChange={handleInputChange}
-          options={[{ value: '未测试', label: '未测试' }, { value: '通过', label: '通过' }, { value: '失败', label: '失败' }]} />
+          options={[...TEST_RESULT_OPTIONS]} />
+        <p className="text-xs text-gray-400 mt-1">用于记录语音能力与系统页面、设置、权限、网络、蓝牙等联动场景的回归结果。</p>
       </div>
 
       {/* 测试周期 */}

@@ -28,7 +28,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
   try {
     // 准备数据
     const data = records.map((record) => ({
-      关联版本号: record.parentVersion || record.versionNumber,
+      关联RD版本: record.versionNumber,
       版本号: record.versionNumber,
       固件版本号: record.firmwareVersion || '',
       关联PR_CR: record.linkedIssues?.join('; ') || '',
@@ -36,9 +36,8 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
       项目类型: getProjectTypeLabel(record.projectType),
       修改模块: record.modifiedModules?.join(', ') || '',
       风险等级: record.riskLevel,
-      冒烟测试: record.smokeTestResult,
-      语音回归: record.voiceRegressionResult,
-      系统回归: record.systemRegressionResult,
+      语音功能回归: record.voiceRegressionResult,
+      系统集成回归: record.systemRegressionResult,
       测试周期: record.testCycle || '',
       原型来源: record.prototypeSource || '',
       测试结果Excel: record.testResultFileName || '',
@@ -54,7 +53,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
 
     // 设置列宽
     const columnWidths = [
-      { wch: 14 }, // 关联版本号
+      { wch: 14 }, // 关联RD版本
       { wch: 12 }, // 版本号
       { wch: 18 }, // 固件版本号
       { wch: 15 }, // 关联PR/CR
@@ -62,9 +61,8 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
       { wch: 10 }, // 项目类型
       { wch: 20 }, // 修改模块
       { wch: 10 }, // 风险等级
-      { wch: 12 }, // 冒烟测试
-      { wch: 12 }, // 语音回归
-      { wch: 12 }, // 系统回归
+      { wch: 14 }, // 语音功能回归
+      { wch: 16 }, // 系统集成回归
       { wch: 20 }, // 测试周期
       { wch: 25 }, // 原型来源
       { wch: 24 }, // 测试结果Excel
@@ -89,7 +87,7 @@ export const exportToCSV = (records: VersionRecord[], filename: string) => {
   try {
     // 准备数据
     const data = records.map((record) => ({
-      关联版本号: record.parentVersion || record.versionNumber,
+      关联RD版本: record.versionNumber,
       版本号: record.versionNumber,
       固件版本号: record.firmwareVersion || '',
       关联PR_CR: record.linkedIssues?.join('; ') || '',
@@ -97,9 +95,8 @@ export const exportToCSV = (records: VersionRecord[], filename: string) => {
       项目类型: getProjectTypeLabel(record.projectType),
       修改模块: record.modifiedModules?.join('; ') || '',
       风险等级: record.riskLevel,
-      冒烟测试: record.smokeTestResult,
-      语音回归: record.voiceRegressionResult,
-      系统回归: record.systemRegressionResult,
+      语音功能回归: record.voiceRegressionResult,
+      系统集成回归: record.systemRegressionResult,
       测试周期: record.testCycle || '',
       原型来源: record.prototypeSource || '',
       测试结果Excel: record.testResultFileName || '',

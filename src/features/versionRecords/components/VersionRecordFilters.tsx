@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
 import { Button } from '../../../components/common/Button';
 import { Input } from '../../../components/common/Input';
+import { DEFAULT_MODULE_OPTIONS, RISK_LEVEL_OPTIONS, VERSION_STATUS_OPTIONS } from '../../../config/dictionaries';
 
 interface VersionRecordFiltersProps {
   filters: {
     keyword?: string;
     riskLevel?: string;
+    versionStatus?: string;
     modifiedModules?: string[];
     startDate?: number;
     endDate?: number;
   };
   onFiltersChange: (filters: any) => void;
 }
-
-const RISK_LEVELS = ['低', '中', '高'];
-const MODULES = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络', 'Android', 'UI', '数据库'];
 
 const VersionRecordFilters: React.FC<VersionRecordFiltersProps> = ({
   filters,
@@ -39,13 +38,17 @@ const VersionRecordFilters: React.FC<VersionRecordFiltersProps> = ({
     updateAndApply({ modifiedModules: next.length > 0 ? next : undefined });
   };
 
+  const toggleVersionStatus = (value: string) => {
+    updateAndApply({ versionStatus: localFilters.versionStatus === value ? undefined : value });
+  };
+
   const handleReset = () => {
-    const empty = { keyword: undefined, riskLevel: undefined, modifiedModules: undefined, startDate: undefined, endDate: undefined };
+    const empty = { keyword: undefined, riskLevel: undefined, versionStatus: undefined, modifiedModules: undefined, startDate: undefined, endDate: undefined };
     setLocalFilters(empty);
     onFiltersChange(empty);
   };
 
-  const hasActiveFilters = localFilters.riskLevel || (localFilters.modifiedModules && localFilters.modifiedModules.length > 0) || localFilters.startDate || localFilters.endDate;
+  const hasActiveFilters = localFilters.riskLevel || localFilters.versionStatus || (localFilters.modifiedModules && localFilters.modifiedModules.length > 0) || localFilters.startDate || localFilters.endDate;
 
   return (
     <div className="bg-white rounded-lg shadow mb-6">
@@ -74,24 +77,35 @@ const VersionRecordFilters: React.FC<VersionRecordFiltersProps> = ({
         <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-gray-500 mr-1">风险等级:</span>
-            {RISK_LEVELS.map((level) => (
+            {RISK_LEVEL_OPTIONS.map((level) => (
               <button
-                key={level} type="button" onClick={() => toggleRiskLevel(level)}
+                key={level.value} type="button" onClick={() => toggleRiskLevel(level.value)}
                 className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                  localFilters.riskLevel === level ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'
+                  localFilters.riskLevel === level.value ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'
                 }`}
-              >{level}</button>
+              >{level.label}</button>
             ))}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-gray-500 mr-1">修改模块:</span>
-            {MODULES.map((mod) => (
+            {DEFAULT_MODULE_OPTIONS.map((mod) => (
               <button
                 key={mod} type="button" onClick={() => toggleModule(mod)}
                 className={`px-3 py-1 rounded-full text-sm transition-colors ${
                   (localFilters.modifiedModules || []).includes(mod) ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'
                 }`}
               >{mod}</button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-gray-500 mr-1">版本状态:</span>
+            {VERSION_STATUS_OPTIONS.map((status) => (
+              <button
+                key={status.value} type="button" onClick={() => toggleVersionStatus(status.value)}
+                className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                  localFilters.versionStatus === status.value ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'
+                }`}
+              >{status.label}</button>
             ))}
           </div>
           <div className="flex gap-3 items-end flex-wrap">

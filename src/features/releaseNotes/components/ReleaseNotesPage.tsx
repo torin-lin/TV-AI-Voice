@@ -15,6 +15,8 @@ import ReleaseNoteModal from './ReleaseNoteModal';
 import { Button } from '../../../components/common/Button';
 import { exportToExcel, exportToCSV } from '../services/ReleaseNotesExportService';
 import { useI18n } from '../../../i18n/I18nProvider';
+import { apiQueryVersionRecords } from '../../../services/VersionRecordApiClient';
+import { VersionRecord } from '../../../types/database';
 
 /**
  * Release Note 页面
@@ -36,6 +38,7 @@ const ReleaseNotesPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ReleaseNote | null>(null);
   const [defaultParentVersion, setDefaultParentVersion] = useState('');
+  const [qaRecords, setQaRecords] = useState<VersionRecord[]>([]);
   
 
   // 初始化加载数据
@@ -47,6 +50,22 @@ const ReleaseNotesPage: React.FC = () => {
       })
     );
   }, [dispatch, filters, pagination, currentProject]);
+
+  useEffect(() => {
+    const loadQaRecords = async () => {
+      try {
+        const response = await apiQueryVersionRecords(
+          currentProject && currentProject !== '全部' ? { projectGroup: currentProject } : {},
+          { page: 1, pageSize: 1000 }
+        );
+        setQaRecords(response.data);
+      } catch {
+        setQaRecords([]);
+      }
+    };
+
+    void loadQaRecords();
+  }, [currentProject]);
 
   // 处理添加新记录
   const handleAddRecord = () => {
@@ -151,6 +170,7 @@ const ReleaseNotesPage: React.FC = () => {
         {/* 数据表格 */}
         <ReleaseNotesTable
           records={items}
+          qaRecords={qaRecords}
           loading={loading}
           pagination={pagination}
           sorting={sorting}

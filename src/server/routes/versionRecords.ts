@@ -10,6 +10,21 @@ import {
   remove,
   getParentVersions,
 } from '../storage/versionRecordStorage';
+import { VersionStatus } from '../../types/database';
+import { findById as findReleaseNoteById } from '../storage/releaseNoteStorage';
+
+const VERSION_STATUS_FLOW: Record<VersionStatus, VersionStatus[]> = {
+  '待测试': ['待测试', '测试中', '阻塞'],
+  '测试中': ['测试中', '阻塞', '待结论'],
+  '阻塞': ['阻塞', '测试中', '待结论'],
+  '待结论': ['待结论', '阻塞', '可发布'],
+  '可发布': ['可发布', '已发布', '阻塞'],
+  '已发布': ['已发布'],
+};
+
+const isValidVersionStatus = (value: unknown): value is VersionStatus => {
+  return typeof value === 'string' && value in VERSION_STATUS_FLOW;
+};
 
 export function setupVersionRecordRoutes(app: any): void {
 
@@ -25,10 +40,11 @@ export function setupVersionRecordRoutes(app: any): void {
   /** GET /api/version-records - 查询列表 */
   app.get('/api/version-records', (req: any, res: any) => {
     try {
-      const { page = '1', pageSize = '20', riskLevel, projectGroup, keyword } = req.query;
+      const { page = '1', pageSize = '20', riskLevel, projectGroup, keyword, versionStatus } = req.query;
       let filtered = [...getAllRecords()];
 
       if (riskLevel) filtered = filtered.filter((r) => r.riskLevel === riskLevel);
+      if (versionStatus) filtered = filtered.filter((r) => (r.versionStatus || '待测试') === versionStatus);
       if (projectGroup && projectGroup !== '全部') {
         const map: Record<string, string> = {
           'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB',
@@ -93,7 +109,27 @@ export function setupVersionRecordRoutes(app: any): void {
   /** POST /api/version-records */
   app.post('/api/version-records', (req: any, res: any) => {
     try {
-      const id = create(req.body);
+      if (req.body.versionStatus && !isValidVersionStatus(req.body.versionStatus)) {
+        return res.status(400).json({ success: false, message: '无效的版本状态' });
+      }
+      if (!req.body.releaseNoteId) {
+        return res.status(400).json({ success: false, message: '创建 QA 版本记录前必须先关联 RD 版本' });
+      }
+
+      const releaseNote = findReleaseNoteById(req.body.releaseNoteId);
+      if (!releaseNote) {
+        return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
+      }
+      if (releaseNote.rdSmokeStatus !== '通过') {
+        return res.status(400).json({ success: false, message: '只有 RD 冒烟通过的版本才能创建 QA 版本记录' });
+      }
+      const payload = {
+        ...req.body,
+        versionNumber: releaseNote.version,
+        parentVersion: releaseNote.parentVersion || '',
+        projectType: releaseNote.projectType || req.body.projectType,
+      };
+      const id = create(payload);
       res.status(201).json({ success: true, data: { id } });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
@@ -103,6 +139,37 @@ export function setupVersionRecordRoutes(app: any): void {
   /** PUT /api/version-records/:id */
   app.put('/api/version-records/:id', (req: any, res: any) => {
     try {
+      const current = findById(req.params.id);
+      if (!current) return res.status(404).json({ success: false, message: '未找到' });
+
+      if (req.body.releaseNoteId) {
+        const releaseNote = findReleaseNoteById(req.body.releaseNoteId);
+        if (!releaseNote) {
+          return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
+        }
+        if (releaseNote.rdSmokeStatus !== '通过') {
+          return res.status(400).json({ success: false, message: '只有 RD 冒烟通过的版本才能关联到 QA 版本记录' });
+        }
+        req.body.versionNumber = releaseNote.version;
+        req.body.parentVersion = releaseNote.parentVersion || '';
+        req.body.projectType = releaseNote.projectType || req.body.projectType;
+      }
+
+      if (req.body.versionStatus) {
+        if (!isValidVersionStatus(req.body.versionStatus)) {
+          return res.status(400).json({ success: false, message: '无效的版本状态' });
+        }
+
+        const currentStatus = current.versionStatus || '待测试';
+        const allowedStatuses = VERSION_STATUS_FLOW[currentStatus];
+        if (!allowedStatuses.includes(req.body.versionStatus)) {
+          return res.status(400).json({
+            success: false,
+            message: `版本状态不允许从 ${currentStatus} 直接流转到 ${req.body.versionStatus}`,
+          });
+        }
+      }
+
       const ok = update(req.params.id, req.body);
       if (!ok) return res.status(404).json({ success: false, message: '未找到' });
       res.json({ success: true });

@@ -39,6 +39,7 @@ export const exportToExcel = (records: ReleaseNote[], filename: string) => {
       项目类型: getProjectTypeLabel(record.projectType),
       修改类型: getChangeTypeLabel(record.changeType),
       严重程度: record.severity,
+      RD冒烟测试: record.rdSmokeStatus || '未测试',
       回归风险: record.regressionRisk,
       破坏性变更: record.breakingChanges ? '是' : '否',
       迁移类型: record.migrationType || '无',
@@ -64,6 +65,7 @@ export const exportToExcel = (records: ReleaseNote[], filename: string) => {
       { wch: 15 }, // 项目类型
       { wch: 10 }, // 修改类型
       { wch: 10 }, // 严重程度
+      { wch: 12 }, // RD冒烟测试
       { wch: 10 }, // 回归风险
       { wch: 10 }, // 破坏性变更
       { wch: 12 }, // 迁移类型
@@ -98,6 +100,7 @@ export const exportToCSV = (records: ReleaseNote[], filename: string) => {
       项目类型: getProjectTypeLabel(record.projectType),
       修改类型: getChangeTypeLabel(record.changeType),
       严重程度: record.severity,
+      RD冒烟测试: record.rdSmokeStatus || '未测试',
       回归风险: record.regressionRisk,
       破坏性变更: record.breakingChanges ? '是' : '否',
       迁移类型: record.migrationType || '无',

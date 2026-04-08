@@ -1,123 +1,156 @@
 # TV AI Voice 测试全流程体系
 
-现代化 Web 应用，用于管理 TV / Projector / STB AI Voice 的测试全流程。
+面向 `TV / Projector / STB AI Voice` 团队的测试协作系统，用来串起 `RD 提测`、`QA 回归`、`问题闭环`、`版本结论` 和 `AI 用例推荐`。
 
-## 项目特性
+当前系统已经从“多个独立页面”演进为一条可落地的业务主线：
 
-- 无账号管理，公开访问
-- 项目组切换（TV / Projector / STB / 全部）
-- 服务端数据存储，支持局域网多人共享
-- AI 驱动的测试用例推荐（Azure OpenAI）
-- 蓝色渐变设计风格，桌面端 1920x1080+
+- `Release Note (RD)` 负责记录研发变更和提测前自检
+- `QA 版本记录` 负责对关联 RD 版本进行固件维度回归
+- `版本工作台` 负责聚合版本范围内的 RD、QA、问题和结论
+- `问题追踪` 负责客户问题 / QA 问题闭环
+- `知识库推荐` 负责基于版本信息给出测试建议
 
-## 核心功能
+## 当前能力
 
-### QA版本记录
-- 版本号、固件版本号、项目类型
-- 关联 PR/CR（点击跳转 zmind）
-- 修改模块（标签式选择 + 自定义添加）
-- 冒烟测试 / 语音回归 / 系统回归结果
-- 测试周期、原型来源（链接或上传文档）
-- 导出 Excel / CSV
+### 1. Release Note (RD)
+- 记录研发版本、分支、作者、修改内容
+- 管理受影响模块、功能、回归风险、迁移类型、修复 PR
+- 支持 `RD 冒烟测试`、提测备注、APK 上传
+- 反向显示该 RD 版本下的 QA 记录数和已测固件数
 
-### Release Note (RD)
-- 手动填写研发修改记录（无 Git 同步）
-- 受影响模块和功能（标签式选择 + 自定义）
-- APK 文件上传（服务端存储）
-- 服务端 JSON 存储，多人共享
-- 导出 Excel / CSV
+### 2. QA 版本记录
+- 以 `关联 RD 版本` 为主入口创建 QA 记录
+- 只有 `RD 冒烟通过` 的版本才能创建 QA 测试记录
+- 支持同一个 RD 版本在多个固件上创建多条测试记录
+- 记录 `语音功能回归`、`系统集成回归`、风险、状态、附件和结论
 
-### 客户问题追踪
-- 问题记录 CRUD
-- AI 自动分类（Azure OpenAI）
-- 状态管理、搜索筛选、导出
+### 3. 版本工作台
+- 以版本为中心聚合：
+  - 版本记录
+  - Release Note
+  - 版本问题
+  - 追踪问题
+  - AI 推荐
+  - 发布结论
+- 支持版本状态机和结论卡保存
+- 提供 RD 提测信息、阻塞提醒、推荐状态和发布前引导
 
-### AI 用例推荐
-- 基于版本信息推荐测试用例
-- 三层推荐策略
-- 推荐历史记录
+### 4. 问题追踪
+- 管理客户问题和 QA 问题
+- 支持 PR 号关联、分类、状态、时间轴
+- 支持与 QA 测试记录链路打通
 
-### 仪表板
-- 版本测试统计、问题统计
-- 语音识别准确率、活动趋势
+### 5. 国际化与体验
+- 支持中英文切换
+- 关键表单和工作台已接入统一翻译
+- 通用提示已统一为 toast，避免 `alert` 打断操作
+
+## 当前业务主线
+
+```text
+Release Note (RD)
+  -> RD 冒烟通过
+  -> QA 版本记录（同一 RD 版本可对应多个固件）
+  -> 版本问题 / 问题追踪
+  -> 版本工作台聚合
+  -> 版本结论
+  -> 可发布 / 已发布
+```
 
 ## 技术栈
 
 - React 18 + TypeScript + Vite
-- Redux Toolkit 状态管理
-- Tailwind CSS 样式
-- IndexedDB (Dexie.js) 本地存储
-- Express.js 服务端 API（Release Note 共享数据）
-- Azure OpenAI API 集成
-- xlsx / papaparse 数据导出
+- Redux Toolkit
+- Tailwind CSS
+- Express.js
+- better-sqlite3
+- axios
+- xlsx / papaparse
+
+## 项目结构
+
+```text
+src/
+├── components/          # 通用组件与布局
+├── config/              # 字典中心、统一选项
+├── features/
+│   ├── versionRecords/  # QA 版本记录
+│   ├── releaseNotes/    # Release Note (RD)
+│   ├── customerProblems/# 问题追踪
+│   └── recommendations/ # AI 测试推荐
+├── i18n/                # 中英文切换
+├── pages/               # 仪表板、工作台、设置等页面
+├── server/              # Express 路由与 SQLite 存储
+├── services/            # 前端 API Client / 上传服务
+├── store/               # Redux Store
+└── types/               # 核心数据模型
+```
+
+## 核心数据关系
+
+- `ReleaseNote`
+  - 研发版本记录
+  - 含 `rdSmokeStatus`
+- `VersionRecord`
+  - QA 测试记录
+  - 通过 `releaseNoteId` 关联 `ReleaseNote`
+  - 一个 RD 版本可关联多条 QA 记录
+- `VersionIssue`
+  - QA 在版本测试过程中提出的问题
+- `CustomerProblem`
+  - 客户问题 / QA 问题追踪
+- `KBRecommendation`
+  - 基于版本记录生成的测试建议
+
+## 当前关键规则
+
+- `RD 冒烟通过` 的 Release Note 才能被 QA 选中创建记录
+- QA 以 `关联 RD 版本` 为主，不再单独维护平行版本入口
+- 一个 RD 版本可以在多个固件上重复测试
+- 版本状态按状态机流转：
+  - `待测试 -> 测试中 / 阻塞`
+  - `测试中 -> 阻塞 / 待结论`
+  - `阻塞 -> 测试中 / 待结论`
+  - `待结论 -> 阻塞 / 可发布`
+  - `可发布 -> 已发布 / 阻塞`
+- `可发布 / 已发布` 时必须补齐结论摘要和负责人
 
 ## 快速开始
 
 ```bash
-# 安装依赖
 npm install
-
-# 一键启动（前端 + 服务端同时启动）
 npm run dev
 ```
 
-- 前端：http://localhost:5173
-- 服务端 API：http://localhost:3000
+- 前端：`http://localhost:5173`
+- API：`http://localhost:3000`
 
-单独启动：
+其他命令：
+
 ```bash
-npm run dev:frontend   # 仅前端
-npm run dev:server     # 仅服务端
+npm run dev:frontend
+npm run dev:server
+npm run type-check
+npm run build
 ```
 
-构建并启动生产版本：
-```bash
-npm run prod
-```
+## 文档
 
-Express 服务器同时托管前端和 API（http://localhost:3000）。
+- [快速开始](./GETTING-STARTED.md)
+- [部署说明](./DEPLOYMENT-GUIDE.md)
+- [Azure OpenAI 配置](./AZURE-OPENAI-SETUP.md)
+- [系统蓝图与排期](./aidlc-docs/CURRENT-SYSTEM-BLUEPRINT.md)
 
-## 项目结构
+## 下一阶段计划
 
-```
-src/
-├── components/          # 通用组件 (Button, Input, Select, Tag...)
-│   ├── common/
-│   └── layout/          # 布局 (MainLayout, ProjectSwitcher)
-├── features/
-│   ├── versionRecords/  # QA版本记录
-│   ├── releaseNotes/    # Release Note (RD)
-│   ├── customerProblems/# 客户问题追踪
-│   └── recommendations/ # AI 用例推荐
-├── db/                  # IndexedDB 数据库层
-├── server/              # 服务端路由和存储
-│   ├── routes/          # API 路由 (releaseNotes, apkUpload, docUpload)
-│   └── storage/         # JSON 文件存储
-├── services/            # 前端服务 (API客户端, 上传服务)
-├── store/               # Redux Store (projectSlice)
-├── pages/               # 页面 (Dashboard, Settings, VoiceRecords)
-├── types/               # TypeScript 类型定义
-└── styles/              # 全局样式
-```
+当前项目优先级已经收敛为三条主线：
 
-## 部署
+1. 把 `版本工作台` 继续补成真正的版本闭环页面
+2. 把 `字典中心 + 状态机 + 国际化` 做成统一底座
+3. 把 `测试管理系统` 逐步升级成更合理的 `项目协同系统`
 
-详见 [DEPLOYMENT-GUIDE.md](./DEPLOYMENT-GUIDE.md)
+下一步建议优先做：
 
-推荐方案：`npm run prod` 一键构建 + 启动 Express 服务器
-
-## Azure OpenAI 配置
-
-详见 [AZURE-OPENAI-SETUP.md](./AZURE-OPENAI-SETUP.md)
-
-端点格式：
-```
-https://fz-test-qa.openai.azure.com/openai/deployments/{deployment-id}/chat/completions?api-version=2024-02-15-preview
-```
-
-## 设计风格
-
-- 主色：蓝色渐变 (#0066CC → #00CCFF)
-- 风险等级：绿(低) / 黄(中) / 红(高)
-- 测试状态：绿(通过) / 红(失败) / 灰(未测试)
-- 仅桌面端，无移动端适配
+1. 版本状态变更时间轴
+2. 发布前检查清单
+3. Release Note / QA / 问题三方跳转闭环

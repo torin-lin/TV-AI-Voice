@@ -3,9 +3,11 @@ import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Card } from '../components/common/Card';
 import { useI18n } from '../i18n/I18nProvider';
+import { useToast } from '../components/common/ToastProvider';
 
 const SettingsPage: React.FC = () => {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const [apiKey, setApiKey] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [modelName, setModelName] = useState('');
@@ -22,7 +24,7 @@ const SettingsPage: React.FC = () => {
     localStorage.setItem('azure_openai_api_key', apiKey);
     localStorage.setItem('azure_openai_endpoint', endpoint);
     localStorage.setItem('azure_openai_model', modelName);
-    alert(t('设置已保存'));
+    showToast(t('设置已保存'), 'success');
   };
 
   const handleTest = async () => {

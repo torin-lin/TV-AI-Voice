@@ -7,6 +7,7 @@ import {
   initReleaseNoteStorage,
   getAllRecords,
   findById,
+  getEligibleQaReleaseNotes,
   create,
   update,
   remove,
@@ -123,6 +124,31 @@ export function setupReleaseNoteRoutes(app: any): void {
         .sort((a: any, b: any) => b.createdAt - a.createdAt)
         .map((r: any) => ({ version: r.version, projectType: r.projectType, id: r.id }));
       res.json({ success: true, data: versions });
+    } catch (error) {
+      res.status(500).json({ success: false, message: (error as Error).message });
+    }
+  });
+
+  /**
+   * GET /api/release-notes/eligible-for-qa
+   * 获取允许创建 QA 版本记录的 RD 版本（仅 RD 冒烟通过）
+   */
+  app.get('/api/release-notes/eligible-for-qa', (req: any, res: any) => {
+    try {
+      const { projectType } = req.query;
+      const data = getEligibleQaReleaseNotes(projectType).map((record: any) => ({
+        id: record.id,
+        version: record.version,
+        parentVersion: record.parentVersion,
+        projectType: record.projectType,
+        changeDescription: record.changeDescription,
+        affectedModules: record.affectedModules || [],
+        regressionRisk: record.regressionRisk,
+        rdSmokeStatus: record.rdSmokeStatus || '未测试',
+        author: record.author,
+        branch: record.branch,
+      }));
+      res.json({ success: true, data });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
     }

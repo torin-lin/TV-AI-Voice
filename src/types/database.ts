@@ -19,6 +19,8 @@ export interface ReleaseNote {
   affectedModules: string[];
   changeType: '功能' | '修复' | '优化' | '重构' | '文档';
   severity: '低' | '中' | '高' | '紧急';
+  /** RD 提测前冒烟自测结果 */
+  rdSmokeStatus?: '通过' | '失败' | '未测试';
   testingNotes?: string;
   regressionRisk?: '低' | '中' | '高';
   affectedFeatures?: string[];
@@ -40,8 +42,12 @@ export interface ReleaseNote {
 /**
  * 版本测试记录接口
  */
+export type VersionStatus = '待测试' | '测试中' | '阻塞' | '待结论' | '可发布' | '已发布';
+
 export interface VersionRecord {
   id?: string;
+  /** 关联的 RD Release Note ID */
+  releaseNoteId?: string;
   versionNumber: string;
   /** 关联主版本号，为空表示自身是主版本 */
   parentVersion?: string;
@@ -74,6 +80,20 @@ export interface VersionRecord {
   testResultFileSize?: number;
   /** 语言模型 */
   languageModel?: string;
+  /** 版本状态：待测试 / 测试中 / 阻塞 / 待结论 / 可发布 / 已发布 */
+  versionStatus?: VersionStatus;
+  /** 版本结论：待评估 / 有条件通过 / 不通过 / 可发布 */
+  releaseDecision?: '待评估' | '有条件通过' | '不通过' | '可发布';
+  /** 结论摘要 */
+  conclusionSummary?: string;
+  /** 遗留风险 */
+  remainingRisks?: string;
+  /** 发布前行动项 */
+  nextActions?: string;
+  /** 结论负责人 */
+  conclusionOwner?: string;
+  /** 结论更新时间 */
+  conclusionUpdatedAt?: number;
   notes?: string;
   createdAt: number;
   updatedAt: number;
@@ -227,6 +247,7 @@ export interface KBRecommendation {
  */
 export interface QueryFilter {
   riskLevel?: 'low' | 'medium' | 'high';
+  versionStatus?: VersionStatus;
   startDate?: number;
   endDate?: number;
   modifiedModules?: string[];

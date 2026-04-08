@@ -4,6 +4,7 @@ import { AppDispatch, RootState } from '../../../store';
 import { VersionRecord } from '../../../types/database';
 import { createVersionRecord, updateVersionRecord } from '../store/versionRecordsSlice';
 import VersionRecordForm from './VersionRecordForm';
+import { useToast } from '../../../components/common/ToastProvider';
 
 interface VersionRecordModalProps {
   record?: VersionRecord | null;
@@ -19,6 +20,7 @@ const VersionRecordModal: React.FC<VersionRecordModalProps> = ({
   onClose,
 }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const { showToast } = useToast();
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const [loading, setLoading] = useState(false);
 
@@ -51,6 +53,7 @@ const VersionRecordModal: React.FC<VersionRecordModalProps> = ({
       onClose();
     } catch (error) {
       console.error('保存失败:', error);
+      showToast((error as Error).message || '保存失败', 'error');
     } finally {
       setLoading(false);
     }

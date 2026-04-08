@@ -94,7 +94,25 @@ export interface ParentVersionInfo {
   id: string;
 }
 
+export interface EligibleQaReleaseNoteInfo {
+  id: string;
+  version: string;
+  parentVersion?: string;
+  projectType?: string;
+  changeDescription: string;
+  affectedModules: string[];
+  regressionRisk?: '低' | '中' | '高';
+  rdSmokeStatus: '通过' | '失败' | '未测试';
+  author: string;
+  branch: string;
+}
+
 export async function apiGetParentVersions(projectType?: string): Promise<ParentVersionInfo[]> {
   const qs = projectType ? `?projectType=${projectType}` : '';
   return apiFetch<ParentVersionInfo[]>(`/api/release-notes/parent-versions${qs}`);
+}
+
+export async function apiGetEligibleQaReleaseNotes(projectType?: string): Promise<EligibleQaReleaseNoteInfo[]> {
+  const qs = projectType ? `?projectType=${projectType}` : '';
+  return apiFetch<EligibleQaReleaseNoteInfo[]>(`/api/release-notes/eligible-for-qa${qs}`);
 }

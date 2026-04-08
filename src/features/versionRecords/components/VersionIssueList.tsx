@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { VersionIssue, IssueAttachment } from '../../../types/database';
 import { fetchVersionIssues, createVersionIssue, updateVersionIssue, deleteVersionIssue, uploadIssueAttachment, deleteIssueAttachment, getAttachmentUrl } from '../../../services/VersionIssueApiClient';
 import { useI18n } from '../../../i18n/I18nProvider';
+import { useToast } from '../../../components/common/ToastProvider';
 
 const ZMIND_BASE = 'https://zmind.whaletv.com/issues/';
 const SEV_CLS: Record<string, string> = { '低': 'bg-green-100 text-green-800', '中': 'bg-yellow-100 text-yellow-800', '高': 'bg-red-100 text-red-800', '紧急': 'bg-red-200 text-red-900' };
@@ -64,6 +65,7 @@ const CreateForm: React.FC<{ form: any; setForm: (f: any) => void; onCreate: () 
 /** 单条问题卡片 - 支持编辑、前提条件/测试环境显示、同步指示器 */
 const IssueCard: React.FC<{ issue: VersionIssue; onRefresh: () => void }> = ({ issue, onRefresh }) => {
   const { formatDateTime, t } = useI18n();
+  const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     title: issue.title, description: issue.description || '', precondition: issue.precondition || '',
@@ -87,12 +89,12 @@ const IssueCard: React.FC<{ issue: VersionIssue; onRefresh: () => void }> = ({ i
     const files = e.target.files; if (!files?.length) return;
     setUploading(true);
     try { for (let i = 0; i < files.length; i++) { setProgress(0); await uploadIssueAttachment(issue.id!, files[i], setProgress); } onRefresh(); }
-    catch (err) { alert(`${t('失败')}: ${(err as Error).message}`); }
+    catch (err) { showToast(`${t('失败')}: ${(err as Error).message}`, 'error'); }
     setUploading(false); if (fileRef.current) fileRef.current.value = '';
   };
   const doDelAtt = async (a: IssueAttachment) => {
     if (!confirm(`确定删除附件 "${a.fileName}"？`)) return;
-    try { await deleteIssueAttachment(issue.id!, a.savedFileName); onRefresh(); } catch (err) { alert(`${t('删除')} ${t('失败')}: ${(err as Error).message}`); }
+    try { await deleteIssueAttachment(issue.id!, a.savedFileName); onRefresh(); } catch (err) { showToast(`${t('删除')} ${t('失败')}: ${(err as Error).message}`, 'error'); }
   };
 
   return (

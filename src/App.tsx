@@ -9,6 +9,7 @@ import RecommendationsPage from './features/recommendations/components/Recommend
 import VoiceRecordsPage from './pages/VoiceRecordsPage';
 import SettingsPage from './pages/SettingsPage';
 import AliasTestPage from './pages/AliasTestPage';
+import VersionWorkbenchPage from './pages/VersionWorkbenchPage';
 import { useI18n } from './i18n/I18nProvider';
 
 /**
@@ -28,6 +29,7 @@ const App: React.FC = () => {
           <Route path="/voice-records" element={<VoiceRecordsPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/alias-test" element={<AliasTestPage />} />
+          <Route path="/version-workbench/:versionKey" element={<VersionWorkbenchPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

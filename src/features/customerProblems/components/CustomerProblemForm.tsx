@@ -8,9 +8,9 @@ import { Textarea } from '../../../components/common/Textarea';
 import { Input } from '../../../components/common/Input';
 import { fetchFirmwareVersion } from '../../../services/ZmindApiService';
 import { useI18n } from '../../../i18n/I18nProvider';
+import { CUSTOMER_PROBLEM_STATUS_OPTIONS, DEFAULT_PROBLEM_CLASSIFICATIONS, PROJECT_OPTIONS } from '../../../config/dictionaries';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
-const CLASSIFICATIONS = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络', 'Android'];
 
 interface CustomerProblemFormProps {
   problem?: CustomerProblem | null;
@@ -192,7 +192,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">问题分类</label>
         <div className="flex flex-wrap gap-2">
-          {CLASSIFICATIONS.map((c) => (
+          {DEFAULT_PROBLEM_CLASSIFICATIONS.map((c) => (
             <button
               key={c}
               type="button"
@@ -206,7 +206,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
               {c}
             </button>
           ))}
-          {formData.classification && !CLASSIFICATIONS.includes(formData.classification) && (
+          {formData.classification && !DEFAULT_PROBLEM_CLASSIFICATIONS.includes(formData.classification as any) && (
             <span className="px-3 py-1 rounded-full text-sm bg-blue-500 text-white">{formData.classification}</span>
           )}
         </div>
@@ -235,11 +235,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
           name="projectType"
           value={formData.projectType || 'TV'}
           onChange={handleInputChange}
-          options={[
-            { value: 'TV', label: 'TV AI Voice' },
-            { value: 'Projector', label: 'Projector AI Voice' },
-            { value: 'STB', label: 'STB AI Voice' },
-          ]}
+          options={[...PROJECT_OPTIONS]}
         />
       </div>
 
@@ -250,11 +246,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
           name="status"
           value={formData.status || '开放'}
           onChange={handleInputChange}
-          options={[
-            { value: '开放', label: '开放' },
-            { value: '进行中', label: '进行中' },
-            { value: '已解决', label: '已解决' },
-          ]}
+          options={[...CUSTOMER_PROBLEM_STATUS_OPTIONS]}
         />
       </div>
 

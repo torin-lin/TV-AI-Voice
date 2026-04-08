@@ -8,6 +8,7 @@ import { apiQueryReleaseNotes } from '../services/ReleaseNoteApiClient';
 import { apiQueryProblems } from '../services/CustomerProblemApiClient';
 import { fetchVersionRecords } from '../features/versionRecords/store/versionRecordsSlice';
 import { useI18n } from '../i18n/I18nProvider';
+import { getVersionStatusClass } from '../features/versionRecords/versionStatus';
 
 const DashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -34,13 +35,21 @@ const DashboardPage: React.FC = () => {
 
   // 统计
   const passedTests = versionRecords.filter(
-    (v) => v.smokeTestResult === '通过' && v.voiceRegressionResult === '通过' && v.systemRegressionResult === '通过'
+    (v) => v.voiceRegressionResult === '通过' && v.systemRegressionResult === '通过'
   ).length;
   const highRisk = versionRecords.filter((v) => v.riskLevel === '高').length;
   const passRate = versionRecords.length > 0 ? Math.round((passedTests / versionRecords.length) * 100) : 0;
   const openProblems = customerProblems.filter((p) => p.status === '开放').length;
   const inProgressProblems = customerProblems.filter((p) => p.status === '进行中').length;
   const resolvedProblems = customerProblems.filter((p) => p.status === '已解决').length;
+  const versionStatusCounts = {
+    '待测试': versionRecords.filter((v) => (v.versionStatus || '待测试') === '待测试').length,
+    '测试中': versionRecords.filter((v) => v.versionStatus === '测试中').length,
+    '阻塞': versionRecords.filter((v) => v.versionStatus === '阻塞').length,
+    '待结论': versionRecords.filter((v) => v.versionStatus === '待结论').length,
+    '可发布': versionRecords.filter((v) => v.versionStatus === '可发布').length,
+    '已发布': versionRecords.filter((v) => v.versionStatus === '已发布').length,
+  };
 
   // 风险等级分布
   const riskDistribution = {
@@ -68,6 +77,11 @@ const DashboardPage: React.FC = () => {
   const statusDistribution = {
     labels: ['开放', '进行中', '已解决'],
     data: [openProblems, inProgressProblems, resolvedProblems],
+  };
+
+  const versionStatusDistribution = {
+    labels: Object.keys(versionStatusCounts),
+    data: Object.values(versionStatusCounts),
   };
 
   return (
@@ -115,7 +129,7 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* 图表区 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <h2 className="text-lg font-bold text-gray-900 mb-4">风险等级分布</h2>
             <PieChart data={riskDistribution} />
@@ -127,6 +141,10 @@ const DashboardPage: React.FC = () => {
           <Card>
             <h2 className="text-lg font-bold text-gray-900 mb-4">问题状态分布</h2>
             <PieChart data={statusDistribution} />
+          </Card>
+          <Card>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">版本状态分布</h2>
+            <PieChart data={versionStatusDistribution} />
           </Card>
         </div>
 
@@ -210,11 +228,52 @@ const DashboardPage: React.FC = () => {
                     <p className="text-sm text-gray-600 truncate" title={record.changeDescription}>{record.changeDescription}</p>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${record.smokeTestResult === '通过' ? 'bg-green-100 text-green-800' : record.smokeTestResult === '失败' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}>{record.smokeTestResult}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${record.voiceRegressionResult === '通过' && record.systemRegressionResult === '通过' ? 'bg-green-100 text-green-800' : record.voiceRegressionResult === '失败' || record.systemRegressionResult === '失败' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}>
+                      {record.voiceRegressionResult === '通过' && record.systemRegressionResult === '通过' ? '回归通过' : record.voiceRegressionResult === '失败' || record.systemRegressionResult === '失败' ? '回归失败' : '回归未完成'}
+                    </span>
                   </div>
                 </div>
               ))}
               {highRisk === 0 && <p className="text-gray-400 text-sm">暂无高风险版本 👍</p>}
+            </div>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <Card>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">版本状态看板</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {Object.entries(versionStatusCounts).map(([status, count]) => (
+                <div key={status} className="rounded-lg bg-gray-50 border border-gray-100 p-3">
+                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getVersionStatusClass(status)}`}>
+                    {status}
+                  </span>
+                  <p className="text-2xl font-bold text-gray-900 mt-3">{count}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">待处理版本重点</h2>
+            <div className="space-y-3">
+              {versionRecords
+                .filter((record) => ['阻塞', '待结论', '测试中'].includes(record.versionStatus || '待测试'))
+                .slice(0, 6)
+                .map((record) => (
+                  <div key={record.id} className="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-gray-900 break-all">{record.versionNumber}</p>
+                      <p className="text-sm text-gray-600 truncate" title={record.changeDescription}>{record.changeDescription}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${getVersionStatusClass(record.versionStatus || '待测试')}`}>
+                      {record.versionStatus || '待测试'}
+                    </span>
+                  </div>
+                ))}
+              {versionRecords.filter((record) => ['阻塞', '待结论', '测试中'].includes(record.versionStatus || '待测试')).length === 0 && (
+                <p className="text-gray-400 text-sm">当前没有需要重点推进的版本</p>
+              )}
             </div>
           </Card>
         </div>

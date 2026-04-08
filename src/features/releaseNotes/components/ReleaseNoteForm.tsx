@@ -6,6 +6,16 @@ import { Select } from '../../../components/common/Select';
 import { Textarea } from '../../../components/common/Textarea';
 import { uploadApk, formatFileSize, ApkUploadResult } from '../../../services/ApkUploadService';
 import { apiGetParentVersions, ParentVersionInfo } from '../../../services/ReleaseNoteApiClient';
+import {
+  DEFAULT_FEATURE_OPTIONS,
+  DEFAULT_MODULE_OPTIONS,
+  MIGRATION_TYPE_OPTIONS,
+  PROJECT_OPTIONS,
+  RELEASE_NOTE_CHANGE_TYPE_OPTIONS,
+  RELEASE_NOTE_SEVERITY_OPTIONS,
+  RISK_LEVEL_OPTIONS,
+  TEST_RESULT_OPTIONS,
+} from '../../../config/dictionaries';
 
 interface ReleaseNoteFormProps {
   record?: ReleaseNote | null;
@@ -18,10 +28,6 @@ interface ReleaseNoteFormProps {
 }
 
 /** 默认模块选项（用户可自定义添加） */
-const DEFAULT_MODULES = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络', 'Android', 'UI', '数据库'];
-/** 默认功能选项（用户可自定义添加） */
-const DEFAULT_FEATURES = ['语音识别', '语音合成', '自然语言理解', '数据同步', '性能优化', '安全性'];
-
 /**
  * 标签输入组件
  * 支持从预设选项中选择，也支持自定义输入新标签
@@ -142,6 +148,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
     affectedModules: [],
     changeType: '功能',
     severity: '中',
+    rdSmokeStatus: '未测试',
     testingNotes: '',
     regressionRisk: '中',
     affectedFeatures: [],
@@ -334,11 +341,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           <Select
             name="projectType" value={formData.projectType || 'TV'}
             onChange={handleInputChange}
-            options={[
-              { value: 'TV', label: 'TV AI Voice' },
-              { value: 'Projector', label: 'Projector AI Voice' },
-              { value: 'STB', label: 'STB AI Voice' },
-            ]}
+            options={[...PROJECT_OPTIONS]}
           />
         </div>
 
@@ -348,13 +351,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           <Select
             name="changeType" value={formData.changeType || '功能'}
             onChange={handleInputChange}
-            options={[
-              { value: '功能', label: '功能' },
-              { value: '修复', label: '修复' },
-              { value: '优化', label: '优化' },
-              { value: '重构', label: '重构' },
-              { value: '文档', label: '文档' },
-            ]}
+            options={[...RELEASE_NOTE_CHANGE_TYPE_OPTIONS]}
           />
         </div>
 
@@ -364,13 +361,19 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           <Select
             name="severity" value={formData.severity || '中'}
             onChange={handleInputChange}
-            options={[
-              { value: '低', label: '低' },
-              { value: '中', label: '中' },
-              { value: '高', label: '高' },
-              { value: '紧急', label: '紧急' },
-            ]}
+            options={[...RELEASE_NOTE_SEVERITY_OPTIONS]}
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">RD 冒烟测试</label>
+          <Select
+            name="rdSmokeStatus"
+            value={formData.rdSmokeStatus || '未测试'}
+            onChange={handleInputChange}
+            options={[...TEST_RESULT_OPTIONS]}
+          />
+          <p className="text-xs text-gray-400 mt-1">用于记录研发提测前的基本自测结果，不再放在 QA 版本记录主流程里。</p>
         </div>
 
         {/* 回归风险 */}
@@ -379,11 +382,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           <Select
             name="regressionRisk" value={formData.regressionRisk || '中'}
             onChange={handleInputChange}
-            options={[
-              { value: '低', label: '低' },
-              { value: '中', label: '中' },
-              { value: '高', label: '高' },
-            ]}
+            options={[...RISK_LEVEL_OPTIONS]}
           />
         </div>
 
@@ -393,12 +392,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           <Select
             name="migrationType" value={formData.migrationType || '无'}
             onChange={handleInputChange}
-            options={[
-              { value: '无', label: '无' },
-              { value: '数据迁移', label: '数据迁移' },
-              { value: '配置更新', label: '配置更新' },
-              { value: '其他', label: '其他' },
-            ]}
+            options={[...MIGRATION_TYPE_OPTIONS]}
           />
         </div>
 
@@ -447,7 +441,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
             setErrors((prev) => { const n = { ...prev }; delete n.affectedModules; return n; });
           }
         }}
-        suggestions={DEFAULT_MODULES}
+        suggestions={[...DEFAULT_MODULE_OPTIONS]}
         error={errors.affectedModules}
       />
 
@@ -456,7 +450,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
         label="受影响的功能"
         tags={formData.affectedFeatures || []}
         onChange={(tags) => setFormData((prev) => ({ ...prev, affectedFeatures: tags }))}
-        suggestions={DEFAULT_FEATURES}
+        suggestions={[...DEFAULT_FEATURE_OPTIONS]}
       />
 
       {/* 测试备注 */}

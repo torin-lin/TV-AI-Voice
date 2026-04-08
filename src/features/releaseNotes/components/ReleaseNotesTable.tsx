@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store';
-import { ReleaseNote } from '../../../types/database';
+import { ReleaseNote, VersionRecord } from '../../../types/database';
 import { Button } from '../../../components/common/Button';
 import { Tag } from '../../../components/common/Tag';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
@@ -14,6 +14,7 @@ const PT_COLOR: Record<string, string> = { TV: 'bg-yellow-100 text-yellow-800', 
 
 interface ReleaseNotesTableProps {
   records: (ReleaseNote & { children?: ReleaseNote[] })[];
+  qaRecords: VersionRecord[];
   loading: boolean;
   pagination: { page: number; pageSize: number; total: number };
   sorting: { field: string; order: 'asc' | 'desc' };
@@ -48,8 +49,31 @@ const getRiskColor = (r?: string) => {
   return m[r || ''] || 'bg-gray-100 text-gray-800';
 };
 
+const getTestResultColor = (result?: string) => {
+  const m: Record<string, string> = {
+    '通过': 'bg-green-100 text-green-800',
+    '失败': 'bg-red-100 text-red-800',
+    '未测试': 'bg-gray-100 text-gray-700',
+  };
+  return m[result || ''] || 'bg-gray-100 text-gray-800';
+};
+
+const ReleaseNoteDetailCard: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="min-w-0 rounded-lg border border-blue-100 bg-white/80 p-3 shadow-sm">
+    <span className="text-xs font-medium text-gray-500">{label}</span>
+    <div className="mt-2 text-sm text-gray-900">{children}</div>
+  </div>
+);
+
+const ReleaseNoteDetailSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <section className="min-w-0 rounded-xl border border-blue-100 bg-white/90 p-4 shadow-sm">
+    <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+    <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">{children}</div>
+  </section>
+);
+
 const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
-  records, loading, pagination, sorting, onEdit, onDelete, onPaginationChange, onSortingChange, onAddChild,
+  records, qaRecords, loading, pagination, sorting, onEdit, onDelete, onPaginationChange, onSortingChange, onAddChild,
 }) => {
   const { formatDateTime } = useI18n();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -75,6 +99,20 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
   };
 
   const totalPages = Math.ceil(pagination.total / pagination.pageSize);
+  const detailColSpan = showProjectCol ? 9 : 8;
+
+  const getQaStats = (note: ReleaseNote & { children?: ReleaseNote[] }) => {
+    const relatedIds = new Set<string>([
+      ...(note.id ? [note.id] : []),
+      ...((note.children || []).map((child) => child.id).filter(Boolean) as string[]),
+    ]);
+    const relatedRecords = qaRecords.filter((record) => record.releaseNoteId && relatedIds.has(record.releaseNoteId));
+    const firmwareCount = new Set(relatedRecords.map((record) => record.firmwareVersion).filter(Boolean)).size;
+    return {
+      recordCount: relatedRecords.length,
+      firmwareCount,
+    };
+  };
 
   if (loading && records.length === 0) {
     return <div className="flex justify-center items-center py-12"><LoadingSpinner /></div>;
@@ -86,27 +124,27 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed">
+        <table className="min-w-[1160px] w-full table-fixed">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 w-8"></th>
-              {showProjectCol && <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">项目</th>}
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
+              {showProjectCol && <th className="w-24 px-3 py-3 text-left text-sm font-semibold text-gray-900">项目</th>}
+              <th className="w-32 px-3 py-3 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
                 onClick={() => handleHeaderClick('version')}>版本号{getSortIndicator('version')}</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">分支</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">作者</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">修改内容</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">类型</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">严重程度</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
+              <th className="w-32 px-3 py-3 text-left text-sm font-semibold text-gray-900">提交信息</th>
+              <th className="w-36 px-3 py-3 text-left text-sm font-semibold text-gray-900">修改内容</th>
+              <th className="w-32 px-3 py-3 text-left text-sm font-semibold text-gray-900">研发概览</th>
+              <th className="w-28 px-3 py-3 text-left text-sm font-semibold text-gray-900">QA 覆盖</th>
+              <th className="w-36 px-3 py-3 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
                 onClick={() => handleHeaderClick('createdAt')}>创建时间{getSortIndicator('createdAt')}</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">操作</th>
+              <th className="w-28 px-3 py-3 text-left text-sm font-semibold text-gray-900">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {records.map((r) => {
               const isExpanded = expandedIds.has(r.id!);
               const hasChildren = r.children && r.children.length > 0;
+              const qaStats = getQaStats(r);
               return (
                 <React.Fragment key={r.id}>
                   {/* 大版本主行 */}
@@ -128,14 +166,31 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-sm"><code className="bg-gray-100 px-2 py-0.5 rounded text-xs">{r.branch}</code></td>
-                    <td className="px-3 py-3 text-sm text-gray-600">{r.author}</td>
-                    <td className="px-3 py-3 text-sm text-gray-600 max-w-xs truncate" title={r.changeDescription}>{r.changeDescription}</td>
-                    <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getChangeTypeColor(r.changeType)}>{r.changeType}</Tag></td>
-                    <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getSeverityColor(r.severity)}>{r.severity}</Tag></td>
+                    <td className="px-3 py-3 text-sm text-gray-600">
+                      <div className="min-w-0">
+                        <p className="truncate" title={r.branch}>{r.branch}</p>
+                        <p className="mt-1 text-xs text-gray-400 truncate" title={r.author}>{r.author}</p>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-600">
+                      <p className="line-clamp-2 break-words" title={r.changeDescription}>{r.changeDescription}</p>
+                    </td>
+                    <td className="px-3 py-3 text-sm">
+                      <div className="flex flex-wrap gap-1">
+                        <Tag variant="primary" className={getChangeTypeColor(r.changeType)}>{r.changeType}</Tag>
+                        <Tag variant="primary" className={getSeverityColor(r.severity)}>{r.severity}</Tag>
+                        <Tag variant="primary" className={getTestResultColor(r.rdSmokeStatus)}>{r.rdSmokeStatus || '未测试'}</Tag>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-700">
+                      <div className="min-w-0">
+                        <p>{qaStats.recordCount} 条记录</p>
+                        <p className="mt-1 text-xs text-gray-400">{qaStats.firmwareCount} 个固件</p>
+                      </div>
+                    </td>
                     <td className="px-3 py-3 text-sm text-gray-600">{formatDateTime(r.createdAt)}</td>
                     <td className="px-3 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex gap-1">
+                      <div className="flex flex-nowrap gap-1">
                         <Button onClick={() => onEdit(r)} variant="secondary" size="sm">编辑</Button>
                         <Button onClick={() => onDelete(r.id!)} variant="danger" size="sm">删除</Button>
                       </div>
@@ -145,69 +200,78 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                   {isExpanded && (
                     <>
                       <tr className="bg-blue-100/30">
-                        <td colSpan={showProjectCol ? 10 : 9} className="px-6 py-4">
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm overflow-hidden">
-                            <div className="min-w-0">
-                              <span className="text-gray-500">修改内容：</span>
-                              <p className="text-gray-900 mt-1 whitespace-pre-wrap break-words">{r.changeDescription}</p>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">受影响模块：</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {r.affectedModules?.map((m) => (
-                                  <span key={m} className="px-2 py-0.5 bg-blue-200 text-blue-600 rounded text-xs">{m}</span>
-                                ))}
-                                {(!r.affectedModules || r.affectedModules.length === 0) && <span className="text-gray-400">-</span>}
-                              </div>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">受影响功能：</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {r.affectedFeatures?.map((f) => (
-                                  <span key={f} className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">{f}</span>
-                                ))}
-                                {(!r.affectedFeatures || r.affectedFeatures.length === 0) && <span className="text-gray-400">-</span>}
-                              </div>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">回归风险：</span>
-                              <span className="ml-1"><Tag variant="primary" className={getRiskColor(r.regressionRisk)}>{r.regressionRisk || '-'}</Tag></span>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">破坏性变更：</span>
-                              <span className="ml-1">{r.breakingChanges ? <Tag variant="primary" className="bg-red-100 text-red-800">是</Tag> : <Tag variant="primary" className="bg-gray-100 text-gray-600">否</Tag>}</span>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">迁移类型：</span>
-                              <span className="ml-1 text-gray-900">{r.migrationType || '无'}</span>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">测试备注：</span>
-                              <p className="text-gray-900 mt-1 break-words">{r.testingNotes || '-'}</p>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">修复 PR：</span>
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {(r as any).fixedPRs?.length > 0
-                                  ? (r as any).fixedPRs.map((pr: string) => <a key={pr} href={`${ZMIND_PR_URL}${pr}`} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 hover:underline">#{pr}</a>)
-                                  : <span className="text-gray-400">-</span>}
-                              </div>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-gray-500">APK：</span>
-                              {r.apkFileName && r.apkFilePath ? (
-                                <a href={getApkDownloadUrl(r.apkFilePath)} target="_blank" rel="noopener noreferrer"
-                                  className="text-blue-700 hover:underline text-sm mt-1 inline-flex items-center gap-1 break-all">
-                                  📦 {r.apkFileName} ({r.apkFileSize ? formatFileSize(r.apkFileSize) : ''})
-                                </a>
-                              ) : <span className="text-gray-400 ml-1">-</span>}
-                            </div>
+                        <td colSpan={detailColSpan} className="px-6 py-4">
+                          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                            <ReleaseNoteDetailSection title="变更信息">
+                              <ReleaseNoteDetailCard label="修改内容">
+                                <p className="whitespace-pre-wrap break-words">{r.changeDescription}</p>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="受影响模块">
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {r.affectedModules?.map((m) => (
+                                    <span key={m} className="px-2 py-0.5 bg-blue-200 text-blue-600 rounded text-xs">{m}</span>
+                                  ))}
+                                  {(!r.affectedModules || r.affectedModules.length === 0) && <span className="text-gray-400">-</span>}
+                                </div>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="受影响功能">
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {r.affectedFeatures?.map((f) => (
+                                    <span key={f} className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">{f}</span>
+                                  ))}
+                                  {(!r.affectedFeatures || r.affectedFeatures.length === 0) && <span className="text-gray-400">-</span>}
+                                </div>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="修复 PR">
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {(r as any).fixedPRs?.length > 0
+                                    ? (r as any).fixedPRs.map((pr: string) => <a key={pr} href={`${ZMIND_PR_URL}${pr}`} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 hover:underline">#{pr}</a>)
+                                    : <span className="text-gray-400">-</span>}
+                                </div>
+                              </ReleaseNoteDetailCard>
+                            </ReleaseNoteDetailSection>
+                            <ReleaseNoteDetailSection title="研发提测">
+                              <ReleaseNoteDetailCard label="回归风险">
+                                <Tag variant="primary" className={getRiskColor(r.regressionRisk)}>{r.regressionRisk || '-'}</Tag>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="破坏性变更">
+                                {r.breakingChanges ? <Tag variant="primary" className="bg-red-100 text-red-800">是</Tag> : <Tag variant="primary" className="bg-gray-100 text-gray-600">否</Tag>}
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="迁移类型">
+                                <span>{r.migrationType || '无'}</span>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="RD 冒烟测试">
+                                <Tag variant="primary" className={getTestResultColor(r.rdSmokeStatus)}>{r.rdSmokeStatus || '未测试'}</Tag>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="测试备注">
+                                <p className="break-words">{r.testingNotes || '-'}</p>
+                              </ReleaseNoteDetailCard>
+                            </ReleaseNoteDetailSection>
+                            <ReleaseNoteDetailSection title="QA 覆盖">
+                              <ReleaseNoteDetailCard label="QA 测试记录">
+                                <span>{qaStats.recordCount}</span>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="已测固件数">
+                                <span>{qaStats.firmwareCount}</span>
+                              </ReleaseNoteDetailCard>
+                            </ReleaseNoteDetailSection>
+                            <ReleaseNoteDetailSection title="附件资源">
+                              <ReleaseNoteDetailCard label="APK">
+                                {r.apkFileName && r.apkFilePath ? (
+                                  <a href={getApkDownloadUrl(r.apkFilePath)} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 break-all text-blue-700 hover:underline">
+                                    📦 {r.apkFileName} ({r.apkFileSize ? formatFileSize(r.apkFileSize) : ''})
+                                  </a>
+                                ) : <span className="text-gray-400 ml-1">-</span>}
+                              </ReleaseNoteDetailCard>
+                            </ReleaseNoteDetailSection>
                           </div>
                         </td>
                       </tr>
                       {/* 子版本列表 */}
                       {hasChildren && r.children!.map((child) => {
                         const isChildExpanded = expandedChildIds.has(child.id!);
+                        const childQaStats = getQaStats(child);
                         return (
                           <React.Fragment key={child.id}>
                             <tr className="bg-gray-50/50 hover:bg-blue-50/30 cursor-pointer border-l-4 border-blue-300"
@@ -225,14 +289,31 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                               <td className="px-3 py-2 text-sm text-blue-700 font-medium pl-6">
                                 ↳ {child.version}
                               </td>
-                              <td className="px-3 py-2 text-sm"><code className="bg-gray-100 px-2 py-0.5 rounded text-xs">{child.branch}</code></td>
-                              <td className="px-3 py-2 text-sm text-gray-600">{child.author}</td>
-                              <td className="px-3 py-2 text-sm text-gray-600 max-w-xs truncate" title={child.changeDescription}>{child.changeDescription}</td>
-                              <td className="px-3 py-2 text-sm"><Tag variant="primary" className={getChangeTypeColor(child.changeType)}>{child.changeType}</Tag></td>
-                              <td className="px-3 py-2 text-sm"><Tag variant="primary" className={getSeverityColor(child.severity)}>{child.severity}</Tag></td>
+                              <td className="px-3 py-2 text-sm text-gray-600">
+                                <div className="min-w-0">
+                                  <p className="truncate" title={child.branch}>{child.branch}</p>
+                                  <p className="mt-1 text-xs text-gray-400 truncate" title={child.author}>{child.author}</p>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-sm text-gray-600">
+                                <p className="line-clamp-2 break-words" title={child.changeDescription}>{child.changeDescription}</p>
+                              </td>
+                              <td className="px-3 py-2 text-sm">
+                                <div className="flex flex-wrap gap-1">
+                                  <Tag variant="primary" className={getChangeTypeColor(child.changeType)}>{child.changeType}</Tag>
+                                  <Tag variant="primary" className={getSeverityColor(child.severity)}>{child.severity}</Tag>
+                                  <Tag variant="primary" className={getTestResultColor(child.rdSmokeStatus)}>{child.rdSmokeStatus || '未测试'}</Tag>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-sm text-gray-700">
+                                <div className="min-w-0">
+                                  <p>{childQaStats.recordCount} 条记录</p>
+                                  <p className="mt-1 text-xs text-gray-400">{childQaStats.firmwareCount} 个固件</p>
+                                </div>
+                              </td>
                               <td className="px-3 py-2 text-sm text-gray-600">{formatDateTime(child.createdAt)}</td>
                               <td className="px-3 py-2 text-sm" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex gap-1">
+                                <div className="flex flex-nowrap gap-1">
                                   <Button onClick={() => onEdit(child)} variant="secondary" size="sm">编辑</Button>
                                   <Button onClick={() => onDelete(child.id!)} variant="danger" size="sm">删除</Button>
                                 </div>
@@ -240,40 +321,52 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                             </tr>
                             {isChildExpanded && (
                               <tr className="bg-blue-50/20 border-l-4 border-blue-200">
-                                <td colSpan={showProjectCol ? 10 : 9} className="px-8 py-3">
-                                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-                                    <div className="min-w-0">
-                                      <span className="text-gray-500">修改内容：</span>
-                                      <p className="text-gray-900 mt-1 whitespace-pre-wrap break-words">{child.changeDescription}</p>
-                                    </div>
-                                    <div className="min-w-0">
-                                      <span className="text-gray-500">受影响模块：</span>
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {child.affectedModules?.map((m) => <span key={m} className="px-2 py-0.5 bg-blue-200 text-blue-600 rounded text-xs">{m}</span>)}
-                                        {(!child.affectedModules || child.affectedModules.length === 0) && <span className="text-gray-400">-</span>}
-                                      </div>
-                                    </div>
-                                    <div className="min-w-0">
-                                      <span className="text-gray-500">测试备注：</span>
-                                      <p className="text-gray-900 mt-1 break-words">{child.testingNotes || '-'}</p>
-                                    </div>
-                                    <div className="min-w-0">
-                                      <span className="text-gray-500">修复 PR：</span>
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {(child as any).fixedPRs?.length > 0
-                                          ? (child as any).fixedPRs.map((pr: string) => <a key={pr} href={`${ZMIND_PR_URL}${pr}`} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 hover:underline">#{pr}</a>)
-                                          : <span className="text-gray-400">-</span>}
-                                      </div>
-                                    </div>
-                                    <div className="min-w-0">
-                                      <span className="text-gray-500">APK：</span>
-                                      {child.apkFileName && child.apkFilePath ? (
-                                        <a href={getApkDownloadUrl(child.apkFilePath)} target="_blank" rel="noopener noreferrer"
-                                          className="text-blue-700 hover:underline text-sm mt-1 inline-flex items-center gap-1 break-all">
-                                          📦 {child.apkFileName} ({child.apkFileSize ? formatFileSize(child.apkFileSize) : ''})
-                                        </a>
-                                      ) : <span className="text-gray-400 ml-1">-</span>}
-                                    </div>
+                                <td colSpan={detailColSpan} className="px-8 py-3">
+                                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                                    <ReleaseNoteDetailSection title="变更信息">
+                                      <ReleaseNoteDetailCard label="修改内容">
+                                        <p className="whitespace-pre-wrap break-words">{child.changeDescription}</p>
+                                      </ReleaseNoteDetailCard>
+                                      <ReleaseNoteDetailCard label="受影响模块">
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {child.affectedModules?.map((m) => <span key={m} className="px-2 py-0.5 bg-blue-200 text-blue-600 rounded text-xs">{m}</span>)}
+                                          {(!child.affectedModules || child.affectedModules.length === 0) && <span className="text-gray-400">-</span>}
+                                        </div>
+                                      </ReleaseNoteDetailCard>
+                                      <ReleaseNoteDetailCard label="修复 PR">
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {(child as any).fixedPRs?.length > 0
+                                            ? (child as any).fixedPRs.map((pr: string) => <a key={pr} href={`${ZMIND_PR_URL}${pr}`} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 hover:underline">#{pr}</a>)
+                                            : <span className="text-gray-400">-</span>}
+                                        </div>
+                                      </ReleaseNoteDetailCard>
+                                    </ReleaseNoteDetailSection>
+                                    <ReleaseNoteDetailSection title="研发提测">
+                                      <ReleaseNoteDetailCard label="RD 冒烟测试">
+                                        <Tag variant="primary" className={getTestResultColor(child.rdSmokeStatus)}>{child.rdSmokeStatus || '未测试'}</Tag>
+                                      </ReleaseNoteDetailCard>
+                                      <ReleaseNoteDetailCard label="测试备注">
+                                        <p className="break-words">{child.testingNotes || '-'}</p>
+                                      </ReleaseNoteDetailCard>
+                                    </ReleaseNoteDetailSection>
+                                    <ReleaseNoteDetailSection title="QA 覆盖">
+                                      <ReleaseNoteDetailCard label="QA 测试记录">
+                                        <span>{childQaStats.recordCount}</span>
+                                      </ReleaseNoteDetailCard>
+                                      <ReleaseNoteDetailCard label="已测固件数">
+                                        <span>{childQaStats.firmwareCount}</span>
+                                      </ReleaseNoteDetailCard>
+                                    </ReleaseNoteDetailSection>
+                                    <ReleaseNoteDetailSection title="附件资源">
+                                      <ReleaseNoteDetailCard label="APK">
+                                        {child.apkFileName && child.apkFilePath ? (
+                                          <a href={getApkDownloadUrl(child.apkFilePath)} target="_blank" rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 break-all text-blue-700 hover:underline">
+                                            📦 {child.apkFileName} ({child.apkFileSize ? formatFileSize(child.apkFileSize) : ''})
+                                          </a>
+                                        ) : <span className="text-gray-400 ml-1">-</span>}
+                                      </ReleaseNoteDetailCard>
+                                    </ReleaseNoteDetailSection>
                                   </div>
                                 </td>
                               </tr>

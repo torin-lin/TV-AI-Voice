@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store';
 import { VersionRecord } from '../../../types/database';
@@ -9,6 +10,7 @@ import { getDocDownloadUrl } from '../../../services/DocUploadService';
 import { formatFileSize } from '../../../services/ApkUploadService';
 import VersionIssueList from './VersionIssueList';
 import { useI18n } from '../../../i18n/I18nProvider';
+import { getVersionStatusClass } from '../versionStatus';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
@@ -85,18 +87,18 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 w-8"></th>
               {showProjectCol && <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">项目</th>}
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
-                onClick={() => handleHeaderClick('versionNumber')}>关联版本号{getSortIndicator('versionNumber')}</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">固件覆盖</th>
+                onClick={() => handleHeaderClick('versionNumber')}>关联 RD 版本{getSortIndicator('versionNumber')}</th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">测试固件</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">修改内容</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
                 onClick={() => handleHeaderClick('riskLevel')}>风险等级{getSortIndicator('riskLevel')}</th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">版本状态</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">记录数</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">冒烟概览</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">语音回归概览</th>
-              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">系统回归概览</th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">测试概览</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-100"
                 onClick={() => handleHeaderClick('createdAt')}>创建时间{getSortIndicator('createdAt')}</th>
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">说明</th>
+              <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">工作台</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -104,7 +106,7 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
               const isExpanded = expandedIds.has(group.versionKey);
               const firmwareList = Array.from(new Set(group.records.map((r) => r.firmwareVersion).filter(Boolean)));
               const latestRecord = group.records[0];
-              const summarizeResult = (key: 'smokeTestResult' | 'voiceRegressionResult' | 'systemRegressionResult') => {
+              const summarizeResult = (key: 'voiceRegressionResult' | 'systemRegressionResult') => {
                 const values = group.records.map((r) => r[key]);
                 if (values.includes('失败')) return '失败';
                 if (values.includes('未测试')) return '未测试';
@@ -118,17 +120,35 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                     </td>
                     {showProjectCol && <td className="px-3 py-3 text-sm"><Tag variant="primary" className={PT_COLOR[group.projectType || ''] || 'bg-gray-100 text-gray-600'}>{PT_LABEL[group.projectType || ''] || '-'}</Tag></td>}
                     <td className="px-3 py-3 text-sm font-medium text-gray-900">{group.rootVersion}</td>
-                    <td className="px-3 py-3 text-sm text-gray-600 max-w-[180px] truncate" title={firmwareList.join('、') || '-'}>
-                      {firmwareList.length > 0 ? firmwareList.join('、') : '-'}
+                    <td className="px-3 py-3 text-sm text-gray-600">
+                      <div className="min-w-0 max-w-[220px]">
+                        <p className="truncate" title={firmwareList.join('、') || '-'}>
+                          {firmwareList.length > 0 ? firmwareList.join('、') : '-'}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {firmwareList.length > 1 ? `${firmwareList.length} 个固件` : firmwareList.length === 1 ? '1 个固件' : '未填写固件'}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-600 max-w-xs truncate" title={latestRecord?.changeDescription}>{latestRecord?.changeDescription || '-'}</td>
                     <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getRiskColor(latestRecord?.riskLevel || '')}>{latestRecord?.riskLevel || '-'}</Tag></td>
+                    <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getVersionStatusClass(latestRecord?.versionStatus || '待测试')}>{latestRecord?.versionStatus || '待测试'}</Tag></td>
                     <td className="px-3 py-3 text-sm text-gray-700">{group.records.length}</td>
-                    <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(summarizeResult('smokeTestResult'))}>{summarizeResult('smokeTestResult')}</Tag></td>
-                    <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(summarizeResult('voiceRegressionResult'))}>{summarizeResult('voiceRegressionResult')}</Tag></td>
-                    <td className="px-3 py-3 text-sm"><Tag variant="primary" className={getStatusColor(summarizeResult('systemRegressionResult'))}>{summarizeResult('systemRegressionResult')}</Tag></td>
+                    <td className="px-3 py-3 text-sm">
+                      <div className="flex flex-wrap gap-1">
+                        <Tag variant="primary" className={getStatusColor(summarizeResult('voiceRegressionResult'))}>{`语音 ${summarizeResult('voiceRegressionResult')}`}</Tag>
+                        <Tag variant="primary" className={getStatusColor(summarizeResult('systemRegressionResult'))}>{`系统集成 ${summarizeResult('systemRegressionResult')}`}</Tag>
+                      </div>
+                    </td>
                     <td className="px-3 py-3 text-sm text-gray-600">{latestRecord?.createdAt ? formatDateTime(latestRecord.createdAt) : '-'}</td>
-                    <td className="px-3 py-3 text-sm text-gray-500">{group.records.length > 1 ? '同版本多固件' : '单记录'}</td>
+                    <td className="px-3 py-3 text-sm text-gray-500">
+                      {firmwareList.length > 1 ? '同版本多固件' : group.records.length > 1 ? '多条测试记录' : '单记录'}
+                    </td>
+                    <td className="px-3 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
+                      <Link to={`/version-workbench/${encodeURIComponent(group.rootVersion)}${group.projectType ? `?projectType=${encodeURIComponent(group.projectType)}` : ''}`}>
+                        <Button variant="secondary" size="sm">工作台</Button>
+                      </Link>
+                    </td>
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-100/30">
@@ -140,8 +160,9 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                                 <div>
                                   <div className="text-sm font-semibold text-gray-900">{r.versionNumber}</div>
                                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                                    <span>固件: {r.firmwareVersion || '-'}</span>
+                                    <span>测试固件: {r.firmwareVersion || '-'}</span>
                                     <span>测试周期: {r.testCycle || '-'}</span>
+                                    <span>版本状态: {r.versionStatus || '待测试'}</span>
                                     <span>创建时间: {formatDateTime(r.createdAt)}</span>
                                   </div>
                                 </div>
@@ -152,6 +173,10 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                               </div>
 
                               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm overflow-hidden">
+                                <div className="min-w-0">
+                                  <span className="text-gray-500">关联 RD 版本：</span>
+                                  <p className="text-gray-900 mt-1 break-words">{r.versionNumber || '-'}</p>
+                                </div>
                                 <div className="min-w-0">
                                   <span className="text-gray-500">修改内容：</span>
                                   <p className="text-gray-900 mt-1 whitespace-pre-wrap break-words">{r.changeDescription}</p>
@@ -208,9 +233,8 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                                 <div className="min-w-0">
                                   <span className="text-gray-500">测试结果概览：</span>
                                   <div className="flex flex-wrap gap-1 mt-1">
-                                    <Tag variant="primary" className={getStatusColor(r.smokeTestResult)}>{`冒烟 ${r.smokeTestResult}`}</Tag>
-                                    <Tag variant="primary" className={getStatusColor(r.voiceRegressionResult)}>{`语音 ${r.voiceRegressionResult}`}</Tag>
-                                    <Tag variant="primary" className={getStatusColor(r.systemRegressionResult)}>{`系统 ${r.systemRegressionResult}`}</Tag>
+                                    <Tag variant="primary" className={getStatusColor(r.voiceRegressionResult)}>{`语音功能 ${r.voiceRegressionResult}`}</Tag>
+                                    <Tag variant="primary" className={getStatusColor(r.systemRegressionResult)}>{`系统集成 ${r.systemRegressionResult}`}</Tag>
                                   </div>
                                 </div>
                                 <div className="col-span-2 min-w-0">

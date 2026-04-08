@@ -36,6 +36,17 @@ export function findById(id: string): ReleaseNote | undefined {
   return row ? rowToRecord(row) : undefined;
 }
 
+export function getEligibleQaReleaseNotes(projectType?: string): ReleaseNote[] {
+  let sql = `SELECT * FROM release_notes WHERE rdSmokeStatus = '通过'`;
+  const params: any[] = [];
+  if (projectType) {
+    sql += ' AND projectType = ?';
+    params.push(projectType);
+  }
+  sql += ' ORDER BY updatedAt DESC, createdAt DESC';
+  return getDb().prepare(sql).all(...params).map(rowToRecord);
+}
+
 export function findByCommitHash(hash: string): ReleaseNote | undefined {
   const row = getDb().prepare('SELECT * FROM release_notes WHERE commitHash = ?').get(hash);
   return row ? rowToRecord(row) : undefined;

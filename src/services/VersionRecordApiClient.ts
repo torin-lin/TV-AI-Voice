@@ -29,6 +29,7 @@ export async function apiQueryVersionRecords(
   params.set('page', String(pagination.page));
   params.set('pageSize', String(pagination.pageSize));
   if (filters.riskLevel) params.set('riskLevel', filters.riskLevel);
+  if (filters.versionStatus) params.set('versionStatus', filters.versionStatus);
   if (filters.projectGroup) params.set('projectGroup', filters.projectGroup);
   if (filters.keyword) params.set('keyword', filters.keyword);
   return apiFetch<PaginationResult<VersionRecord>>(`/api/version-records?${params.toString()}`);

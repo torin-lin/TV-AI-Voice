@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Input } from '../../../components/common/Input';
-
-const CLASSIFICATIONS = ['录音', '蓝牙', 'ASR', 'NLU', '服务端', '网络', 'Android'];
-const STATUSES = ['开放', '进行中', '已解决'];
+import { CUSTOMER_PROBLEM_STATUS_OPTIONS, DEFAULT_PROBLEM_CLASSIFICATIONS } from '../../../config/dictionaries';
 
 interface CustomerProblemFiltersProps {
   filters: {
@@ -72,7 +70,7 @@ const CustomerProblemFilters: React.FC<CustomerProblemFiltersProps> = ({
           <div>
             <span className="text-xs text-gray-500 mr-2">分类:</span>
             <div className="inline-flex flex-wrap gap-1.5">
-              {CLASSIFICATIONS.map((c) => (
+              {DEFAULT_PROBLEM_CLASSIFICATIONS.map((c) => (
                 <button key={c} onClick={() => toggleClassification(c)}
                   className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
                     filters.classification === c
@@ -86,13 +84,13 @@ const CustomerProblemFilters: React.FC<CustomerProblemFiltersProps> = ({
           <div>
             <span className="text-xs text-gray-500 mr-2">状态:</span>
             <div className="inline-flex flex-wrap gap-1.5">
-              {STATUSES.map((s) => (
-                <button key={s} onClick={() => toggleStatus(s)}
+              {CUSTOMER_PROBLEM_STATUS_OPTIONS.map((s) => (
+                <button key={s.value} onClick={() => toggleStatus(s.value)}
                   className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                    filters.status === s
+                    filters.status === s.value
                       ? 'bg-blue-500 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-blue-100'
-                  }`}>{s}</button>
+                  }`}>{s.label}</button>
               ))}
             </div>
           </div>
