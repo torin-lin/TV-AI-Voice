@@ -32,6 +32,7 @@ interface BatchResultItem {
   env: 'acc' | 'prod';
   langCode: string;
   platform: string;
+  expectedSkill: string;
   skill: string;
   action: string;
   standardName: string;
@@ -43,6 +44,9 @@ interface BatchResultItem {
 interface ValidationResult {
   success: boolean;
   error: string;
+  expectedSkill: string;
+  actualSkill: string;
+  reason: string;
 }
 
 function getBaseUrl(): string {
@@ -158,6 +162,25 @@ function getPlannerSkill(result: AskResult | null): string {
   return rawSkill ? String(rawSkill).trim() : '';
 }
 
+function getPlannerArguments(result: AskResult | null): Record<string, any> {
+  const rawArgs = result?.plannerResponse?.data?.arguments || result?.plannerResponse?.arguments || {};
+  return rawArgs && typeof rawArgs === 'object' ? rawArgs : {};
+}
+
+function getPlannerSkillMeta(result: AskResult | null): Record<string, any> {
+  const rawSkill = result?.plannerResponse?.data?.skill || result?.plannerResponse?.skill || {};
+  return rawSkill && typeof rawSkill === 'object' ? rawSkill : {};
+}
+
+function normalizeAppName(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getNonEmptyStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item || '').trim()).filter(Boolean);
+}
+
 function getPlannerAction(result: AskResult | null): string {
   const rawAction = result?.plannerResponse?.data?.arguments?.action || result?.plannerResponse?.arguments?.action;
   if (typeof rawAction === 'object') {
@@ -182,17 +205,51 @@ function normalizeQuestion(value: unknown): string {
     .trim();
 }
 
-function validateAliasResult(result: AskResult | null): ValidationResult {
+function inferExpectedSkill(question: string): { skill: string; reason: string } {
+  const q = normalizeQuestion(question).toLowerCase();
+  const hasYoutube = /\byoutube\b/.test(q);
+  const hasSearchVerb = /\b(search|find|look up|play)\b/.test(q);
+  const usesYoutubeAsTarget = /\b(with|from|on|in)\s+youtube\b/.test(q);
+  const hasMovieCue = /\b(movie|film|cinema|episode|title)\b/.test(q);
+
+  if (hasYoutube && hasSearchVerb && usesYoutubeAsTarget) {
+    return {
+      skill: 'InApp Search Skill',
+      reason: '命令显式指定在 YouTube 内搜索/播放内容，按应用内搜索处理更稳定',
+    };
+  }
+
+  if (hasYoutube && hasMovieCue) {
+    return {
+      skill: 'Movie Search Skill',
+      reason: '命令包含影片类关键词，且目标应用是 YouTube，按影片搜索处理',
+    };
+  }
+
+  return {
+    skill: '',
+    reason: '',
+  };
+}
+
+function validateAliasResult(result: AskResult | null, question = ''): ValidationResult {
   const plannerData = result?.plannerResponse?.data || result?.plannerResponse || {};
+  const plannerArgs = getPlannerArguments(result);
+  const plannerSkillMeta = getPlannerSkillMeta(result);
   const appPkgData = result?.appPkgResponse?.data || result?.appPkgResponse || {};
   const appList: any[] = Array.isArray(appPkgData.appList) ? appPkgData.appList : [];
   const category = getPlannerCategory(result).trim();
   const skill = getPlannerSkill(result).trim();
   const action = getPlannerAction(result).trim();
+  const appName = normalizeAppName(plannerArgs.app);
+  const titles = getNonEmptyStringArray(plannerArgs.titles);
+  const keyword = String(plannerArgs.keyword || '').trim();
+  const endpoint = String(plannerSkillMeta.endpoint || '').trim().toLowerCase();
   const standardName = String(appPkgData.standardName || '').trim();
   const objectType = Number(appPkgData.objectType || 0);
   const matchedApps = appList.map((app) => app.appName || app.pkgName || '').filter(Boolean).join('、');
   const hasSkill = !!skill;
+  const expected = inferExpectedSkill(question || result?.requestInfo?.question || '');
   const hasCategory = !!category;
   const hasAction = !!action;
   const hasStandardName = !!standardName;
@@ -202,10 +259,22 @@ function validateAliasResult(result: AskResult | null): ValidationResult {
   const hasValidCategoryAction = hasValidCategory && hasAction && allowedActions.includes(action);
   const requiresAliasMatch = category === 'launcher' && action === 'launch';
   const hasValidAliasObjectType = objectType === 1 || objectType === 2 || objectType === 3;
+  const isMovieSearchSkill = skill === 'Movie Search Skill' || endpoint.includes('com.zeasn.search');
+  const isInAppSearchSkill = skill === 'InApp Search Skill' || endpoint.includes('com.zeasn.inappsearch');
+  const isYouTubeMovieSearch = isMovieSearchSkill && appName === 'youtube';
+  const isYouTubeInAppSearch = isInAppSearchSkill && appName === 'youtube';
 
   let error = '';
   if (!hasSkill) {
     error = 'Skill 为空';
+  } else if (expected.skill && skill !== expected.skill) {
+    error = `Skill 不符合预期，期望 ${expected.skill}，实际 ${skill}`;
+  } else if (isYouTubeMovieSearch && titles.length === 0) {
+    error = 'YouTube 影片搜索缺少 titles';
+  } else if (isYouTubeInAppSearch && !keyword) {
+    error = 'YouTube 应用内搜索缺少 keyword';
+  } else if (isYouTubeMovieSearch || isYouTubeInAppSearch) {
+    error = '';
   } else if (!hasCategory) {
     error = 'Category 为空';
   } else if (!hasAction) {
@@ -232,7 +301,13 @@ function validateAliasResult(result: AskResult | null): ValidationResult {
     error = '未返回标准名称或匹配结果';
   }
 
-  return { success: !error, error };
+  return {
+    success: !error,
+    error,
+    expectedSkill: expected.skill,
+    actualSkill: skill,
+    reason: expected.reason,
+  };
 }
 
 function findQuestionValue(row: Record<string, any>): string {
@@ -261,7 +336,10 @@ function mapBatchResult(
   const action = getPlannerAction(result).trim();
   const standardName = String(appPkgData.standardName || '').trim();
   const matchedApps = appList.map((app) => app.appName || app.pkgName || '').filter(Boolean).join('、');
-  const validation = error ? { success: false, error } : validateAliasResult(result);
+  const expected = inferExpectedSkill(item.question);
+  const validation = error
+    ? { success: false, error, expectedSkill: expected.skill, actualSkill: skill, reason: expected.reason }
+    : validateAliasResult(result, item.question);
 
   return {
     question: item.question,
@@ -270,6 +348,7 @@ function mapBatchResult(
     env,
     langCode,
     platform: platform || '不传 (默认)',
+    expectedSkill: validation.expectedSkill,
     skill,
     action,
     standardName,
@@ -287,6 +366,7 @@ function exportBatchResults(results: BatchResultItem[]): void {
     环境: item.env,
     语言: item.langCode,
     Platform: item.platform,
+    期望Skill: item.expectedSkill || '-',
     Skill: item.skill,
     Action: item.action,
     标准名称: item.standardName || '-',
@@ -587,7 +667,7 @@ const AliasTestPage: React.FC = () => {
           {history.map(item => (
             <div key={item.timestamp} className="bg-white rounded-xl shadow-sm overflow-hidden">
               {(() => {
-                const validation = item.result ? validateAliasResult(item.result) : null;
+                const validation = item.result ? validateAliasResult(item.result, item.question) : null;
                 const itemFailed = !!item.error || (validation ? !validation.success : false);
                 const itemError = item.error || validation?.error || '';
 
@@ -609,6 +689,12 @@ const AliasTestPage: React.FC = () => {
                 )}
                 {item.result && (
                   <div className="space-y-4">
+                    {validation?.expectedSkill && (
+                      <div className={`rounded-xl border px-4 py-3 text-sm ${validation.success ? 'border-green-100 bg-green-50 text-green-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
+                        期望 Skill: {validation.expectedSkill} | 实际 Skill: {validation.actualSkill || '—'}
+                        {validation.reason ? ` | 判断依据: ${validation.reason}` : ''}
+                      </div>
+                    )}
                     <PlannerSummary data={item.result.plannerResponse} />
                     {item.result.appPkgResponse && (
                       <AppPkgSummary data={item.result.appPkgResponse} />
@@ -705,6 +791,8 @@ const AliasTestPage: React.FC = () => {
                     <th className="px-3 py-2 text-left">行号</th>
                     <th className="px-3 py-2 text-left">Question</th>
                     <th className="px-3 py-2 text-left">结果</th>
+                    <th className="px-3 py-2 text-left">期望 Skill</th>
+                    <th className="px-3 py-2 text-left">实际 Skill</th>
                     <th className="px-3 py-2 text-left">标准名称</th>
                     <th className="px-3 py-2 text-left">匹配应用</th>
                     <th className="px-3 py-2 text-left">错误信息</th>
@@ -720,6 +808,8 @@ const AliasTestPage: React.FC = () => {
                           {item.success ? '成功' : '失败'}
                         </span>
                       </td>
+                      <td className="px-3 py-2 text-gray-700">{item.expectedSkill || '-'}</td>
+                      <td className="px-3 py-2 text-gray-700">{item.skill || '-'}</td>
                       <td className="px-3 py-2 text-gray-700">{item.standardName || '-'}</td>
                       <td className="px-3 py-2 text-gray-700">{item.matchedApps || '-'}</td>
                       <td className="px-3 py-2 text-red-600">{item.error || '-'}</td>
@@ -801,6 +891,7 @@ const PlannerSummary: React.FC<{ data: any }> = ({ data }) => {
   const rawSkill = d.skill || d.intent || '—';
   const skill = typeof rawSkill === 'object' ? (rawSkill.name || JSON.stringify(rawSkill)) : String(rawSkill);
   const args = d.arguments || {};
+  const app = String(args.app || '').trim();
   const rawCategory = args.category || '—';
   const category = typeof rawCategory === 'object' ? JSON.stringify(rawCategory) : String(rawCategory);
   const rawAction = args.action || '—';
@@ -823,6 +914,12 @@ const PlannerSummary: React.FC<{ data: any }> = ({ data }) => {
           <span className="text-gray-500">Action: </span>
           <span className="font-medium text-green-700">{action}</span>
         </div>
+        {app && (
+          <div className="px-3 py-1.5 bg-amber-50 rounded-lg">
+            <span className="text-gray-500">App: </span>
+            <span className="font-medium text-amber-700">{app}</span>
+          </div>
+        )}
       </div>
 
       {Object.keys(params).length > 0 && (

@@ -19,9 +19,43 @@ const URLS = {
 };
 
 const USER_AGENT = 'ZeasnAOSP/13 (EUI64=E8519Efffe28EA60;DeviceType=WHALEOS_CVTE_CAIXUN_AML950D4_2K_P1028;ProductID=wm100;DeviceSetID=;BrandID=12;ClientPKG=com.zeasn.asrself;ClientVersion=1.4.1.9-MP;ClientVersionNum=14000109;UserAgentVersion=1.0)';
+const FETCH_TIMEOUT_MS = 20000;
+const FETCH_RETRY_COUNT = 1;
 
 // deviceToken 仍用内存缓存（短期有效，重启重新获取即可）
 let cachedDeviceToken = '';
+
+function isNetworkTimeoutError(error: unknown): boolean {
+  const code = (error as any)?.cause?.code || (error as any)?.code;
+  return code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT' || (error as Error)?.name === 'TimeoutError';
+}
+
+function getErrorMessage(error: unknown): string {
+  if (isNetworkTimeoutError(error)) {
+    return `连接 planner 服务超时（${FETCH_TIMEOUT_MS}ms），请稍后重试或切换网络后再试`;
+  }
+  return error instanceof Error ? error.message : '未知错误';
+}
+
+async function fetchWithRetry(input: string, init: RequestInit = {}, retryCount = FETCH_RETRY_COUNT): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retryCount || !isNetworkTimeoutError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError;
+}
 
 /** 从数据库读取设置 */
 function getSetting(key: string): string {
@@ -60,7 +94,8 @@ async function getDeviceToken(productId: string, env: 'acc' | 'prod' = 'acc'): P
     osType: 'AOSP',
   });
   try {
-    const res = await fetch(URLS[env].deviceSign, {      method: 'POST',
+    const res = await fetchWithRetry(URLS[env].deviceSign, {
+      method: 'POST',
       headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
@@ -117,9 +152,9 @@ export function setupAliasTestRoutes(app: any): void {
 
       const askUrl = `${URLS[env].planner}?userToken=${encodeURIComponent(storedToken)}&productId=${encodeURIComponent(pid)}&question=${encodeURIComponent(question)}`;
 
-      const askRes = await fetch(askUrl, {
+      const askRes = await fetchWithRetry(askUrl, {
         method: 'POST',
-        headers: { 'User-Agent': USER_AGENT, 'Content-Length': '0' },
+        headers: { 'User-Agent': USER_AGENT },
       });
 
       if (!askRes.ok) {
@@ -140,7 +175,7 @@ export function setupAliasTestRoutes(app: any): void {
           const txt = askData.data.arguments.params.name;
           const voiceLangCode = LANG_TO_LOCALE[langCode] || `${langCode}-US`;
           const appPkgUrl = `${URLS[env].appPkg}?token=${encodeURIComponent(cachedDeviceToken)}&txt=${encodeURIComponent(txt)}&voiceLangCode=${encodeURIComponent(voiceLangCode)}${platform ? `&platform=${encodeURIComponent(platform)}` : ''}`;
-          const appRes = await fetch(appPkgUrl, {
+          const appRes = await fetchWithRetry(appPkgUrl, {
             headers: { 'User-Agent': USER_AGENT, 'userToken': storedToken },
           });
           if (appRes.ok) appPkgData = await appRes.json();
@@ -157,7 +192,8 @@ export function setupAliasTestRoutes(app: any): void {
       });
     } catch (error) {
       console.error('[alias-test] ask 错误:', error);
-      res.status(500).json({ success: false, message: (error as Error).message });
+      const status = isNetworkTimeoutError(error) ? 504 : 500;
+      res.status(status).json({ success: false, message: getErrorMessage(error) });
     }
   });
 
