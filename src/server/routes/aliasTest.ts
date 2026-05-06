@@ -26,6 +26,7 @@ const URLS = {
 
 const USER_AGENT = 'ZeasnAOSP/13 (EUI64=E8519Efffe28EA60;DeviceType=WHALEOS_CVTE_CAIXUN_AML950D4_2K_P1028;ProductID=wm100;DeviceSetID=;BrandID=12;ClientPKG=com.zeasn.asrself;ClientVersion=1.4.1.9-MP;ClientVersionNum=14000109;UserAgentVersion=1.0)';
 const FETCH_TIMEOUT_MS = 20000;
+const MOVIE_SEARCH_TIMEOUT_MS = 45000;
 const FETCH_RETRY_COUNT = 1;
 const DEFAULT_DEVICE_ID = 'E8:51:9E:28:EA:60';
 
@@ -45,14 +46,14 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '未知错误';
 }
 
-async function fetchWithRetry(input: string, init: RequestInit = {}, retryCount = FETCH_RETRY_COUNT): Promise<Response> {
+async function fetchWithRetry(input: string, init: RequestInit = {}, retryCount = FETCH_RETRY_COUNT, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= retryCount; attempt += 1) {
     try {
       return await fetch(input, {
         ...init,
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
       lastError = error;
@@ -168,7 +169,7 @@ async function fetchMovieSearch(
       transactionId: generateTransactionId(),
       mac: DEFAULT_DEVICE_ID,
     }),
-  });
+  }, 2, MOVIE_SEARCH_TIMEOUT_MS);
   if (!res.ok) return null;
   return res.json();
 }
@@ -232,6 +233,7 @@ export function setupAliasTestRoutes(app: any): void {
       const { question, productId, userToken, langCode, env: reqEnv, platform } = req.body;
       const deviceSetId = String(req.body?.deviceSetId || req.body?.devicesetId || '').trim();
       const countryCode = String(req.body?.countryCode || 'US').trim() || 'US';
+      const includeMovieSearch = req.body?.includeMovieSearch !== false;
       if (!question) return res.status(400).json({ success: false, message: '请输入 question' });
 
       const env: 'acc' | 'prod' = reqEnv === 'prod' ? 'prod' : 'acc';
@@ -288,7 +290,7 @@ export function setupAliasTestRoutes(app: any): void {
         } catch { /* ignore */ }
       }
 
-      if (isMovieSearchResult(askData) && cachedDeviceToken) {
+      if (includeMovieSearch && isMovieSearchResult(askData) && cachedDeviceToken) {
         try {
           movieSearchResponse = await fetchMovieSearch(askData.data?.arguments || {}, cachedDeviceToken, storedToken, langCode, env, countryCode);
         } catch (error) {
@@ -311,7 +313,7 @@ export function setupAliasTestRoutes(app: any): void {
           chatResponse,
           appPkgResponse: appPkgData,
           movieSearchResponse,
-          requestInfo: { question, productId: pid, langCode, env, platform, deviceSetId, countryCode },
+          requestInfo: { question, productId: pid, langCode, env, platform, deviceSetId, countryCode, includeMovieSearch },
         },
       });
     } catch (error) {

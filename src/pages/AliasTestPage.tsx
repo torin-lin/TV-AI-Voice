@@ -8,7 +8,7 @@ interface AskResult {
   chatResponse: any;
   appPkgResponse: any;
   movieSearchResponse?: any;
-  requestInfo: { question: string; productId: string };
+  requestInfo: { question: string; productId: string; includeMovieSearch?: boolean };
 }
 
 interface HistoryItem {
@@ -279,6 +279,7 @@ function validateAliasResult(result: AskResult | null, question = '', langCode =
   const isYouTubeInAppSearch = isInAppSearchSkill && appName === 'youtube';
   const isGenericMovieSearch = isMovieSearchSkill && action === 'search';
   const movieSearchItems = getMovieSearchItems(result);
+  const shouldValidateMovieSearchData = result?.requestInfo?.includeMovieSearch !== false;
   const isLlmChatExpected = expected.skill === 'LLM Chat';
   const isLlmChatRoute = isLlmChatExpected
     && !hasSkill
@@ -301,7 +302,7 @@ function validateAliasResult(result: AskResult | null, question = '', langCode =
     error = 'YouTube 影片搜索缺少 titles';
   } else if (isYouTubeInAppSearch && !keyword) {
     error = 'YouTube 应用内搜索缺少 keyword';
-  } else if (isMovieSearchSkill && movieSearchItems.length === 0) {
+  } else if (isMovieSearchSkill && shouldValidateMovieSearchData && movieSearchItems.length === 0) {
     error = '影片搜索未返回结果';
   } else if (isYouTubeMovieSearch || isYouTubeInAppSearch || isGenericMovieSearch || isMovieSearchSkill) {
     error = '';
@@ -504,7 +505,7 @@ const AliasTestPage: React.FC = () => {
     localStorage.setItem(LS_KEY_PRODUCT_ID, productId);
     setLoading(true);
     try {
-      const body: any = { question: q, productId, langCode, env, platform: platform || undefined };
+      const body: any = { question: q, productId, langCode, env, platform: platform || undefined, includeMovieSearch: true };
       // 如果有新输入的 token，一起发过去（服务端会缓存）
       if (userToken.trim()) {
         body.userToken = userToken.trim();
@@ -622,6 +623,7 @@ const AliasTestPage: React.FC = () => {
           platform: params.platform || undefined,
           deviceSetId: params.deviceSetId || undefined,
           countryCode: params.countryCode || undefined,
+          includeMovieSearch: false,
         };
         if (params.userToken) body.userToken = params.userToken;
 
