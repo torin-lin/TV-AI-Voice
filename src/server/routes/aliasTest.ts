@@ -31,6 +31,7 @@ const DEFAULT_DEVICE_ID = 'E8:51:9E:28:EA:60';
 
 // deviceToken 仍用内存缓存（短期有效，重启重新获取即可）
 let cachedDeviceToken = '';
+let cachedDeviceTokenKey = '';
 
 function isNetworkTimeoutError(error: unknown): boolean {
   const code = (error as any)?.cause?.code || (error as any)?.code;
@@ -148,10 +149,11 @@ async function fetchMovieSearch(
   userToken: string,
   langCode: string,
   env: 'acc' | 'prod',
+  countryCode = 'US',
 ): Promise<any | null> {
   if (!deviceToken) return null;
   const language = LANG_TO_LOCALE[langCode] || `${langCode || 'en'}-US`;
-  const searchUrl = `${URLS[env].gptSearch}?token=${encodeURIComponent(deviceToken)}&countryCode=US&langCode=${encodeURIComponent(language)}&type=suggestion`;
+  const searchUrl = `${URLS[env].gptSearch}?token=${encodeURIComponent(deviceToken)}&countryCode=${encodeURIComponent(countryCode || 'US')}&langCode=${encodeURIComponent(language)}&type=suggestion`;
   const res = await fetchWithRetry(searchUrl, {
     method: 'POST',
     headers: {
@@ -228,6 +230,8 @@ export function setupAliasTestRoutes(app: any): void {
   app.post('/api/alias-test/ask', async (req: any, res: any) => {
     try {
       const { question, productId, userToken, langCode, env: reqEnv, platform } = req.body;
+      const deviceSetId = String(req.body?.deviceSetId || req.body?.devicesetId || '').trim();
+      const countryCode = String(req.body?.countryCode || 'US').trim() || 'US';
       if (!question) return res.status(400).json({ success: false, message: '请输入 question' });
 
       const env: 'acc' | 'prod' = reqEnv === 'prod' ? 'prod' : 'acc';
@@ -244,11 +248,13 @@ export function setupAliasTestRoutes(app: any): void {
       const pid = productId || 'wm100';
 
       // 确保有 deviceToken
-      if (!cachedDeviceToken) {
+      const deviceTokenKey = `${env}:${pid}`;
+      if (!cachedDeviceToken || cachedDeviceTokenKey !== deviceTokenKey) {
         cachedDeviceToken = await getDeviceToken(pid, env);
+        cachedDeviceTokenKey = deviceTokenKey;
       }
 
-      const askUrl = `${URLS[env].planner}?userToken=${encodeURIComponent(storedToken)}&productId=${encodeURIComponent(pid)}&question=${encodeURIComponent(question)}`;
+      const askUrl = `${URLS[env].planner}?userToken=${encodeURIComponent(storedToken)}&productId=${encodeURIComponent(pid)}&question=${encodeURIComponent(question)}${deviceSetId ? `&devicesetId=${encodeURIComponent(deviceSetId)}` : ''}`;
 
       const askRes = await fetchWithRetry(askUrl, {
         method: 'POST',
@@ -284,7 +290,7 @@ export function setupAliasTestRoutes(app: any): void {
 
       if (isMovieSearchResult(askData) && cachedDeviceToken) {
         try {
-          movieSearchResponse = await fetchMovieSearch(askData.data?.arguments || {}, cachedDeviceToken, storedToken, langCode, env);
+          movieSearchResponse = await fetchMovieSearch(askData.data?.arguments || {}, cachedDeviceToken, storedToken, langCode, env, countryCode);
         } catch (error) {
           console.warn('[alias-test] 影片搜索调用失败:', error);
         }
@@ -305,7 +311,7 @@ export function setupAliasTestRoutes(app: any): void {
           chatResponse,
           appPkgResponse: appPkgData,
           movieSearchResponse,
-          requestInfo: { question, productId: pid },
+          requestInfo: { question, productId: pid, langCode, env, platform, deviceSetId, countryCode },
         },
       });
     } catch (error) {
@@ -331,6 +337,7 @@ export function setupAliasTestRoutes(app: any): void {
   app.post('/api/alias-test/clear-token', (_req: any, res: any) => {
     deleteSetting('userToken');
     cachedDeviceToken = '';
+    cachedDeviceTokenKey = '';
     res.json({ success: true });
   });
 }

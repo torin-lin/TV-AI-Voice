@@ -27,6 +27,13 @@ interface ImportFeedback {
 interface BatchQuestionItem {
   question: string;
   sourceRow: number;
+  env?: 'acc' | 'prod';
+  productId?: string;
+  langCode?: string;
+  platform?: string;
+  userToken?: string;
+  deviceSetId?: string;
+  countryCode?: string;
 }
 
 interface BatchResultItem {
@@ -34,8 +41,11 @@ interface BatchResultItem {
   sourceRow: number;
   success: boolean;
   env: 'acc' | 'prod';
+  productId: string;
   langCode: string;
   platform: string;
+  deviceSetId: string;
+  countryCode: string;
   expectedSkill: string;
   skill: string;
   action: string;
@@ -342,12 +352,27 @@ function findQuestionValue(row: Record<string, any>): string {
   return normalizeQuestion(firstValue);
 }
 
+function findOptionalRowValue(row: Record<string, any>, aliases: string[]): string {
+  const keys = Object.keys(row);
+  const targetKey = keys.find((key) => aliases.includes(key.trim().toLowerCase()));
+  return targetKey ? normalizeQuestion(row[targetKey]) : '';
+}
+
+function normalizeBatchEnv(value: string): 'acc' | 'prod' | undefined {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'prod' || normalized === '生产') return 'prod';
+  if (normalized === 'acc' || normalized === 'test' || normalized === '测试') return 'acc';
+  return undefined;
+}
+
+function normalizeBatchProductId(value: string): string | undefined {
+  return PRODUCT_ID_OPTIONS.includes(value) ? value : undefined;
+}
+
 function mapBatchResult(
   item: BatchQuestionItem,
   result: AskResult | null,
-  env: 'acc' | 'prod',
-  langCode: string,
-  platform: string,
+  params: { env: 'acc' | 'prod'; productId: string; langCode: string; platform: string; deviceSetId: string; countryCode: string },
   error = '',
 ): BatchResultItem {
   const appPkgData = result?.appPkgResponse?.data || result?.appPkgResponse || {};
@@ -358,18 +383,21 @@ function mapBatchResult(
   const movieSearchItems = getMovieSearchItems(result);
   const standardName = String(appPkgData.standardName || '').trim();
   const matchedApps = appList.map((app) => app.appName || app.pkgName || '').filter(Boolean).join('、');
-  const expected = inferExpectedSkill(item.question, langCode);
+  const expected = inferExpectedSkill(item.question, params.langCode);
   const validation = error
     ? { success: false, error, expectedSkill: expected.skill, actualSkill: skill, reason: expected.reason }
-    : validateAliasResult(result, item.question, langCode);
+    : validateAliasResult(result, item.question, params.langCode);
 
   return {
     question: item.question,
     sourceRow: item.sourceRow,
     success: !!result && validation.success,
-    env,
-    langCode,
-    platform: platform || '不传 (默认)',
+    env: params.env,
+    productId: params.productId,
+    langCode: params.langCode,
+    platform: params.platform || '不传 (默认)',
+    deviceSetId: params.deviceSetId,
+    countryCode: params.countryCode,
     expectedSkill: validation.expectedSkill,
     skill,
     action,
@@ -389,8 +417,11 @@ function exportBatchResults(results: BatchResultItem[]): void {
     Question: item.question,
     执行结果: item.success ? '成功' : '失败',
     环境: item.env,
+    ProductID: item.productId,
     语言: item.langCode,
     Platform: item.platform,
+    DeviceSetID: item.deviceSetId || '-',
+    CountryCode: item.countryCode || '-',
     期望Skill: item.expectedSkill || '-',
     Skill: item.skill,
     Action: item.action,
@@ -505,6 +536,16 @@ const AliasTestPage: React.FC = () => {
     }
   };
 
+  const getBatchParams = (item: BatchQuestionItem) => ({
+    env: item.env || env,
+    productId: item.productId || productId,
+    langCode: item.langCode || langCode,
+    platform: item.platform ?? platform,
+    userToken: item.userToken || userToken.trim(),
+    deviceSetId: item.deviceSetId || '',
+    countryCode: item.countryCode || 'US',
+  });
+
   const handleImportExcel = async (file: File) => {
     setImporting(true);
     setImportFeedback(null);
@@ -515,10 +556,27 @@ const AliasTestPage: React.FC = () => {
       const sheet = workbook.Sheets[firstSheetName];
       const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' });
       const parsed = rows
-        .map((row, index) => ({
-          question: normalizeQuestion(findQuestionValue(row)),
-          sourceRow: index + 2,
-        }))
+        .map((row, index) => {
+          const rowEnv = normalizeBatchEnv(findOptionalRowValue(row, ['env', '环境']));
+          const rowProductId = normalizeBatchProductId(findOptionalRowValue(row, ['productid', 'product id', '产品id', '产品 id']));
+          const rowLangCode = findOptionalRowValue(row, ['langcode', 'lang code', 'language', '语言', '语种']);
+          const rowPlatform = findOptionalRowValue(row, ['platform', '平台']);
+          const rowUserToken = findOptionalRowValue(row, ['usertoken', 'user token', 'token']);
+          const rowDeviceSetId = findOptionalRowValue(row, ['devicesetid', 'deviceset id', 'device set id', '设备集id']);
+          const rowCountryCode = findOptionalRowValue(row, ['countrycode', 'country code', '国家', '国家码']);
+
+          return {
+            question: normalizeQuestion(findQuestionValue(row)),
+            sourceRow: index + 2,
+            env: rowEnv,
+            productId: rowProductId,
+            langCode: rowLangCode || undefined,
+            platform: rowPlatform || undefined,
+            userToken: rowUserToken || undefined,
+            deviceSetId: rowDeviceSetId || undefined,
+            countryCode: rowCountryCode || undefined,
+          };
+        })
         .filter((item) => item.question);
 
       setBatchQuestions(parsed);
@@ -554,9 +612,18 @@ const AliasTestPage: React.FC = () => {
     const results: BatchResultItem[] = [];
     for (let index = 0; index < batchQuestions.length; index++) {
       const item = batchQuestions[index];
+      const params = getBatchParams(item);
       try {
-        const body: any = { question: item.question, productId, langCode, env, platform: platform || undefined };
-        if (userToken.trim()) body.userToken = userToken.trim();
+        const body: any = {
+          question: item.question,
+          productId: params.productId,
+          langCode: params.langCode,
+          env: params.env,
+          platform: params.platform || undefined,
+          deviceSetId: params.deviceSetId || undefined,
+          countryCode: params.countryCode || undefined,
+        };
+        if (params.userToken) body.userToken = params.userToken;
 
         const res = await fetch(`${getBaseUrl()}/api/alias-test/ask`, {
           method: 'POST',
@@ -565,19 +632,19 @@ const AliasTestPage: React.FC = () => {
         });
         const json = await res.json();
         if (json.success) {
-          results.push(mapBatchResult(item, json.data, env, langCode, platform));
-          if (userToken.trim()) {
-            setTokenStatus({ hasUserToken: true, tokenPreview: userToken.trim().slice(0, 16) + '...' });
+          results.push(mapBatchResult(item, json.data, params));
+          if (params.userToken) {
+            setTokenStatus({ hasUserToken: true, tokenPreview: params.userToken.slice(0, 16) + '...' });
             setUserToken('');
           }
         } else {
-          results.push(mapBatchResult(item, null, env, langCode, platform, json.message || `请求失败: ${res.status}`));
+          results.push(mapBatchResult(item, null, params, json.message || `请求失败: ${res.status}`));
           if (res.status === 401) {
             setTokenStatus({ hasUserToken: false, tokenPreview: '' });
           }
         }
       } catch (e: any) {
-        results.push(mapBatchResult(item, null, env, langCode, platform, e.message || '网络错误'));
+        results.push(mapBatchResult(item, null, params, e.message || '网络错误'));
       }
 
       setBatchResults([...results]);
@@ -857,9 +924,10 @@ const AliasTestPage: React.FC = () => {
           {batchQuestions.length > 0 && (
             <div className="mb-3 space-y-2">
               <div className="text-xs text-gray-500">
-                已识别 {batchQuestions.length} 条问题，默认读取首个 Sheet，并优先匹配 `question / 问题 / 语句 / 指令 / query / utterance` 列。
+                已识别 {batchQuestions.length} 条问题，默认读取首个 Sheet；支持 question、env、productId、langCode、platform、userToken、deviceSetId、countryCode 列。
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-cyan-50 px-3 py-1 text-cyan-700">Product ID: {productId}</span>
                 <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">环境: {env}</span>
                 <span className="rounded-full bg-green-50 px-3 py-1 text-green-700">语言: {langCode}</span>
                 <span className="rounded-full bg-purple-50 px-3 py-1 text-purple-700">Platform: {platform || '不传 (默认)'}</span>
@@ -874,6 +942,9 @@ const AliasTestPage: React.FC = () => {
                   <tr>
                     <th className="px-3 py-2 text-left">行号</th>
                     <th className="px-3 py-2 text-left">Question</th>
+                    <th className="px-3 py-2 text-left">Product ID</th>
+                    <th className="px-3 py-2 text-left">语言</th>
+                    <th className="px-3 py-2 text-left">Platform</th>
                     <th className="px-3 py-2 text-left">结果</th>
                     <th className="px-3 py-2 text-left">期望 Skill</th>
                     <th className="px-3 py-2 text-left">实际 Skill</th>
@@ -888,6 +959,9 @@ const AliasTestPage: React.FC = () => {
                     <tr key={`${item.sourceRow}-${item.question}`} className="border-t border-gray-100">
                       <td className="px-3 py-2 text-gray-500">{item.sourceRow}</td>
                       <td className="px-3 py-2 text-gray-900" data-i18n-ignore="true">{item.question}</td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">{item.productId}</td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">{item.langCode}</td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">{item.platform}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={`inline-flex whitespace-nowrap px-2 py-0.5 rounded text-xs ${item.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                           {item.success ? '成功' : '失败'}
