@@ -8,6 +8,11 @@ function getApiBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
 }
 
+export interface ApkSignBrand {
+  key: string;
+  label: string;
+}
+
 /** APK 上传结果 */
 export interface ApkUploadResult {
   success: boolean;
@@ -66,6 +71,26 @@ export async function uploadApk(
  */
 export function getApkDownloadUrl(filePath: string): string {
   return `${getApiBaseUrl()}${filePath}`;
+}
+
+export function getSignedApkDownloadUrl(filePath: string, brandKey: string): string {
+  const fileName = filePath.split('/').pop();
+  if (!fileName) {
+    throw new Error('无效的 APK 下载路径');
+  }
+  return `${getApiBaseUrl()}/api/apk/download-signed/${encodeURIComponent(brandKey)}/${encodeURIComponent(fileName)}`;
+}
+
+export async function fetchApkSignBrands(): Promise<ApkSignBrand[]> {
+  const baseUrl = getApiBaseUrl();
+  const res = await fetch(`${baseUrl}/api/apk/sign-brands`);
+  const result = await res.json();
+
+  if (!res.ok || !result.success) {
+    throw new Error(result.message || '获取品牌签名列表失败');
+  }
+
+  return result.data || [];
 }
 
 /**

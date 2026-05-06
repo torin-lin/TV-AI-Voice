@@ -7,7 +7,7 @@
  * npm install express cors dotenv
  * 
  * 运行:
- * npx ts-node server-setup-example.ts
+ * npx ts-node server.ts
  */
 
 import express, { Express, Request, Response, NextFunction } from 'express';
@@ -25,6 +25,7 @@ import { setupIssueAttachmentRoutes } from './src/server/routes/issueAttachments
 import { setupVersionRecordRoutes } from './src/server/routes/versionRecords';
 import { setupKnowledgeBaseRoutes } from './src/server/routes/knowledgeBase';
 import { setupAliasTestRoutes } from './src/server/routes/aliasTest';
+import { setupVoiceAutomationRoutes } from './src/server/routes/voiceAutomation';
 import { initSqlite, closeSqlite } from './src/server/storage/sqlite';
 
 // 加载环境变量
@@ -77,6 +78,9 @@ setupKnowledgeBaseRoutes(app);
 
 // 设置别名管理测试路由
 setupAliasTestRoutes(app);
+
+// 设置语音自动化代理路由
+setupVoiceAutomationRoutes(app);
 
 // 健康检查端点
 app.get('/health', (_req: Request, res: Response) => {

@@ -253,6 +253,12 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                                     <p className="text-gray-900 mt-1 whitespace-pre-wrap break-words">{r.qaEarlyInterventionReason}</p>
                                   </div>
                                 )}
+                                {r.qaEarlyInterventionOwner && (
+                                  <div className="min-w-0">
+                                    <span className="text-gray-500">介入责任人：</span>
+                                    <p className="text-gray-900 mt-1 break-words">{r.qaEarlyInterventionOwner}</p>
+                                  </div>
+                                )}
                               </div>
                               <div className="mt-4">
                                 <VersionIssueList versionRecordId={r.id!} versionNumber={r.versionNumber} />

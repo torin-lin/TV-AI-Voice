@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../components/common/Button';
 import * as XLSX from 'xlsx';
+import { inferExpectedSkill } from '../config/aliasTestSkillRules';
 
 interface AskResult {
   plannerResponse: any;
+  chatResponse: any;
   appPkgResponse: any;
+  movieSearchResponse?: any;
   requestInfo: { question: string; productId: string };
 }
 
 interface HistoryItem {
   question: string;
+  langCode: string;
   result: AskResult | null;
   error: string | null;
   timestamp: number;
@@ -35,6 +39,9 @@ interface BatchResultItem {
   expectedSkill: string;
   skill: string;
   action: string;
+  llmReply: string;
+  movieResultCount: number;
+  topMovieName: string;
   standardName: string;
   matchedApps: string;
   error: string;
@@ -56,6 +63,7 @@ function getBaseUrl(): string {
 const LS_KEY_ENV = 'alias_test_env';
 const LS_KEY_LANG = 'alias_test_lang';
 const LS_KEY_PLATFORM = 'alias_test_platform';
+const LS_KEY_PRODUCT_ID = 'alias_test_product_id';
 
 const PLATFORM_OPTIONS = [
   { value: '', label: '不传 (默认)' },
@@ -65,6 +73,8 @@ const PLATFORM_OPTIONS = [
   { value: 'PJT_WhaleOS3_2', label: 'PJT_WhaleOS3_2' },
   { value: 'STB_WhaleOS10_1', label: 'STB_WhaleOS10_1' },
 ];
+
+const PRODUCT_ID_OPTIONS = ['wstb10', 'wm100', 'wtv10'];
 
 const ALLOWED_CATEGORY_ACTIONS: Record<string, string[]> = {
   speaker: ['volumeUp', 'volumeDown', 'mute', 'unmute', 'adjustVolume'],
@@ -197,6 +207,24 @@ function getPlannerCategory(result: AskResult | null): string {
   return rawCategory ? String(rawCategory).trim() : '';
 }
 
+function getPlannerShortcut(result: AskResult | null): string {
+  const rawShortcut = result?.plannerResponse?.data?.shortcut || result?.plannerResponse?.shortcut || result?.plannerResponse?.data?.deeplink || result?.plannerResponse?.deeplink;
+  if (typeof rawShortcut === 'object') {
+    return JSON.stringify(rawShortcut).trim();
+  }
+  return rawShortcut ? String(rawShortcut).trim() : '';
+}
+
+function getChatReplyText(result: AskResult | null): string {
+  const rawText = result?.chatResponse?.data?.text || result?.chatResponse?.text;
+  return rawText ? String(rawText).trim() : '';
+}
+
+function getMovieSearchItems(result: AskResult | null): any[] {
+  const data = result?.movieSearchResponse?.data;
+  return Array.isArray(data) ? data : [];
+}
+
 function normalizeQuestion(value: unknown): string {
   return String(value ?? '')
     .replace(/[\uFEFF\u200B-\u200D\u2060]/g, '')
@@ -205,34 +233,7 @@ function normalizeQuestion(value: unknown): string {
     .trim();
 }
 
-function inferExpectedSkill(question: string): { skill: string; reason: string } {
-  const q = normalizeQuestion(question).toLowerCase();
-  const hasYoutube = /\byoutube\b/.test(q);
-  const hasSearchVerb = /\b(search|find|look up|play)\b/.test(q);
-  const usesYoutubeAsTarget = /\b(with|from|on|in)\s+youtube\b/.test(q);
-  const hasMovieCue = /\b(movie|film|cinema|episode|title)\b/.test(q);
-
-  if (hasYoutube && hasSearchVerb && usesYoutubeAsTarget) {
-    return {
-      skill: 'InApp Search Skill',
-      reason: '命令显式指定在 YouTube 内搜索/播放内容，按应用内搜索处理更稳定',
-    };
-  }
-
-  if (hasYoutube && hasMovieCue) {
-    return {
-      skill: 'Movie Search Skill',
-      reason: '命令包含影片类关键词，且目标应用是 YouTube，按影片搜索处理',
-    };
-  }
-
-  return {
-    skill: '',
-    reason: '',
-  };
-}
-
-function validateAliasResult(result: AskResult | null, question = ''): ValidationResult {
+function validateAliasResult(result: AskResult | null, question = '', langCode = ''): ValidationResult {
   const plannerData = result?.plannerResponse?.data || result?.plannerResponse || {};
   const plannerArgs = getPlannerArguments(result);
   const plannerSkillMeta = getPlannerSkillMeta(result);
@@ -241,15 +242,18 @@ function validateAliasResult(result: AskResult | null, question = ''): Validatio
   const category = getPlannerCategory(result).trim();
   const skill = getPlannerSkill(result).trim();
   const action = getPlannerAction(result).trim();
+  const shortcut = getPlannerShortcut(result).trim();
+  const chatReplyText = getChatReplyText(result);
   const appName = normalizeAppName(plannerArgs.app);
   const titles = getNonEmptyStringArray(plannerArgs.titles);
   const keyword = String(plannerArgs.keyword || '').trim();
+  const plannerQuestion = normalizeQuestion(plannerArgs.question);
   const endpoint = String(plannerSkillMeta.endpoint || '').trim().toLowerCase();
   const standardName = String(appPkgData.standardName || '').trim();
   const objectType = Number(appPkgData.objectType || 0);
   const matchedApps = appList.map((app) => app.appName || app.pkgName || '').filter(Boolean).join('、');
   const hasSkill = !!skill;
-  const expected = inferExpectedSkill(question || result?.requestInfo?.question || '');
+  const expected = inferExpectedSkill(question || result?.requestInfo?.question || '', langCode);
   const hasCategory = !!category;
   const hasAction = !!action;
   const hasStandardName = !!standardName;
@@ -263,9 +267,23 @@ function validateAliasResult(result: AskResult | null, question = ''): Validatio
   const isInAppSearchSkill = skill === 'InApp Search Skill' || endpoint.includes('com.zeasn.inappsearch');
   const isYouTubeMovieSearch = isMovieSearchSkill && appName === 'youtube';
   const isYouTubeInAppSearch = isInAppSearchSkill && appName === 'youtube';
+  const isGenericMovieSearch = isMovieSearchSkill && action === 'search';
+  const movieSearchItems = getMovieSearchItems(result);
+  const isLlmChatExpected = expected.skill === 'LLM Chat';
+  const isLlmChatRoute = isLlmChatExpected
+    && !hasSkill
+    && !hasCategory
+    && !hasAction
+    && !shortcut
+    && plannerQuestion === normalizeQuestion(question || result?.requestInfo?.question || '')
+    && !!chatReplyText;
 
   let error = '';
-  if (!hasSkill) {
+  if (isLlmChatExpected && !isLlmChatRoute) {
+    error = '未命中大模型聊天规则：应返回 question，且 skill/category/action/shortcut 为空，并返回 chat/talk 文本';
+  } else if (isLlmChatRoute) {
+    error = '';
+  } else if (!hasSkill) {
     error = 'Skill 为空';
   } else if (expected.skill && skill !== expected.skill) {
     error = `Skill 不符合预期，期望 ${expected.skill}，实际 ${skill}`;
@@ -273,7 +291,9 @@ function validateAliasResult(result: AskResult | null, question = ''): Validatio
     error = 'YouTube 影片搜索缺少 titles';
   } else if (isYouTubeInAppSearch && !keyword) {
     error = 'YouTube 应用内搜索缺少 keyword';
-  } else if (isYouTubeMovieSearch || isYouTubeInAppSearch) {
+  } else if (isMovieSearchSkill && movieSearchItems.length === 0) {
+    error = '影片搜索未返回结果';
+  } else if (isYouTubeMovieSearch || isYouTubeInAppSearch || isGenericMovieSearch || isMovieSearchSkill) {
     error = '';
   } else if (!hasCategory) {
     error = 'Category 为空';
@@ -334,12 +354,14 @@ function mapBatchResult(
   const appList: any[] = Array.isArray(appPkgData.appList) ? appPkgData.appList : [];
   const skill = getPlannerSkill(result).trim();
   const action = getPlannerAction(result).trim();
+  const llmReply = getChatReplyText(result);
+  const movieSearchItems = getMovieSearchItems(result);
   const standardName = String(appPkgData.standardName || '').trim();
   const matchedApps = appList.map((app) => app.appName || app.pkgName || '').filter(Boolean).join('、');
-  const expected = inferExpectedSkill(item.question);
+  const expected = inferExpectedSkill(item.question, langCode);
   const validation = error
     ? { success: false, error, expectedSkill: expected.skill, actualSkill: skill, reason: expected.reason }
-    : validateAliasResult(result, item.question);
+    : validateAliasResult(result, item.question, langCode);
 
   return {
     question: item.question,
@@ -351,6 +373,9 @@ function mapBatchResult(
     expectedSkill: validation.expectedSkill,
     skill,
     action,
+    llmReply,
+    movieResultCount: movieSearchItems.length,
+    topMovieName: String(movieSearchItems[0]?.name || ''),
     standardName,
     matchedApps,
     error: validation.error,
@@ -369,6 +394,9 @@ function exportBatchResults(results: BatchResultItem[]): void {
     期望Skill: item.expectedSkill || '-',
     Skill: item.skill,
     Action: item.action,
+    大模型回复: item.llmReply || '-',
+    影片结果数: item.movieResultCount,
+    首个影片: item.topMovieName || '-',
     标准名称: item.standardName || '-',
     匹配应用: item.matchedApps || '-',
     错误信息: item.error || '-',
@@ -385,6 +413,7 @@ function exportBatchResults(results: BatchResultItem[]): void {
     { wch: 14 },
     { wch: 20 },
     { wch: 20 },
+    { wch: 60 },
     { wch: 24 },
     { wch: 32 },
     { wch: 40 },
@@ -394,7 +423,10 @@ function exportBatchResults(results: BatchResultItem[]): void {
 
 const AliasTestPage: React.FC = () => {
   const [question, setQuestion] = useState('');
-  const [productId] = useState('wm100');
+  const [productId, setProductId] = useState(() => {
+    const saved = localStorage.getItem(LS_KEY_PRODUCT_ID) || 'wtv10';
+    return PRODUCT_ID_OPTIONS.includes(saved) ? saved : 'wtv10';
+  });
   const [env, setEnv] = useState<'acc' | 'prod'>(() => (localStorage.getItem(LS_KEY_ENV) as 'acc' | 'prod') || 'acc');
   const [langCode, setLangCode] = useState(() => localStorage.getItem(LS_KEY_LANG) || 'en');
   const [platform, setPlatform] = useState(() => localStorage.getItem(LS_KEY_PLATFORM) || '');
@@ -438,6 +470,7 @@ const AliasTestPage: React.FC = () => {
     localStorage.setItem(LS_KEY_ENV, env);
     localStorage.setItem(LS_KEY_LANG, langCode);
     localStorage.setItem(LS_KEY_PLATFORM, platform);
+    localStorage.setItem(LS_KEY_PRODUCT_ID, productId);
     setLoading(true);
     try {
       const body: any = { question: q, productId, langCode, env, platform: platform || undefined };
@@ -452,20 +485,20 @@ const AliasTestPage: React.FC = () => {
       });
       const json = await res.json();
       if (json.success) {
-        setHistory(prev => [{ question: q, result: json.data, error: null, timestamp: Date.now() }, ...prev]);
+        setHistory(prev => [{ question: q, langCode, result: json.data, error: null, timestamp: Date.now() }, ...prev]);
         // token 已被服务端缓存，更新状态
         if (userToken.trim()) {
           setTokenStatus({ hasUserToken: true, tokenPreview: userToken.trim().slice(0, 16) + '...' });
           setUserToken(''); // 清空输入框，下次不用再填
         }
       } else {
-        setHistory(prev => [{ question: q, result: null, error: json.message || '请求失败', timestamp: Date.now() }, ...prev]);
+        setHistory(prev => [{ question: q, langCode, result: null, error: json.message || '请求失败', timestamp: Date.now() }, ...prev]);
         if (res.status === 401) {
           setTokenStatus({ hasUserToken: false, tokenPreview: '' });
         }
       }
     } catch (e: any) {
-      setHistory(prev => [{ question: q, result: null, error: e.message || '网络错误', timestamp: Date.now() }, ...prev]);
+      setHistory(prev => [{ question: q, langCode, result: null, error: e.message || '网络错误', timestamp: Date.now() }, ...prev]);
     } finally {
       setLoading(false);
       setQuestion('');
@@ -511,6 +544,7 @@ const AliasTestPage: React.FC = () => {
     localStorage.setItem(LS_KEY_ENV, env);
     localStorage.setItem(LS_KEY_LANG, langCode);
     localStorage.setItem(LS_KEY_PLATFORM, platform);
+    localStorage.setItem(LS_KEY_PRODUCT_ID, productId);
 
     setBatchRunning(true);
     setBatchResults([]);
@@ -577,7 +611,7 @@ const AliasTestPage: React.FC = () => {
             importFeedback.type === 'success'
               ? 'border-green-200 bg-green-50 text-green-700'
               : 'border-red-200 bg-red-50 text-red-700'
-          }`}>
+          }`} data-i18n-ignore={importFeedback.type === 'success' ? undefined : 'true'}>
             {importFeedback.text}
           </div>
         )}
@@ -588,7 +622,7 @@ const AliasTestPage: React.FC = () => {
             <span className="text-sm font-medium text-gray-700">🔑 Token 状态:</span>
             {tokenStatus?.hasUserToken ? (
               <span className="text-sm text-green-600">
-                ✅ 已缓存 ({tokenStatus.tokenPreview})
+                ✅ 已缓存 (<span data-i18n-ignore="true">{tokenStatus.tokenPreview}</span>)
                 <button onClick={handleClearToken} className="ml-2 text-xs text-red-400 hover:text-red-600">清除</button>
               </span>
             ) : (
@@ -613,7 +647,19 @@ const AliasTestPage: React.FC = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-[auto_auto_auto_1fr] gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-[auto_auto_auto_auto_1fr] gap-3 items-end">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Product ID</label>
+              <select
+                value={productId}
+                onChange={e => setProductId(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+              >
+                {PRODUCT_ID_OPTIONS.map(id => (
+                  <option key={id} value={id}>{id}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">环境</label>
               <select value={env} onChange={e => setEnv(e.target.value as 'acc' | 'prod')}
@@ -649,6 +695,7 @@ const AliasTestPage: React.FC = () => {
             <input value={question} onChange={e => setQuestion(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleAsk(); }}
               placeholder="输入 question，如：Go to Settings、Open YouTube、Turn up the volume..."
+              data-i18n-ignore="true"
               className="min-w-[280px] flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
             <Button onClick={handleAsk} variant="primary" disabled={loading || !question.trim() || !hasToken}>
               {loading ? '请求中...' : '🚀 发送'}
@@ -667,7 +714,7 @@ const AliasTestPage: React.FC = () => {
           {history.map(item => (
             <div key={item.timestamp} className="bg-white rounded-xl shadow-sm overflow-hidden">
               {(() => {
-                const validation = item.result ? validateAliasResult(item.result, item.question) : null;
+                const validation = item.result ? validateAliasResult(item.result, item.question, item.langCode) : null;
                 const itemFailed = !!item.error || (validation ? !validation.success : false);
                 const itemError = item.error || validation?.error || '';
 
@@ -675,7 +722,7 @@ const AliasTestPage: React.FC = () => {
                   <>
               <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900">Q: {item.question}</span>
+                  <span className="text-sm font-medium text-gray-900" data-i18n-ignore="true">Q: {item.question}</span>
                   {item.result && !itemFailed && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">成功</span>}
                   {itemFailed && <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">失败</span>}
                 </div>
@@ -684,26 +731,63 @@ const AliasTestPage: React.FC = () => {
               <div className="p-5">
                 {itemError && (
                   <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                    ❌ {itemError}
+                    <span data-i18n-ignore="true">❌ {itemError}</span>
                   </div>
                 )}
                 {item.result && (
                   <div className="space-y-4">
                     {validation?.expectedSkill && (
-                      <div className={`rounded-xl border px-4 py-3 text-sm ${validation.success ? 'border-green-100 bg-green-50 text-green-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
+                      <div className={`rounded-xl border px-4 py-3 text-sm ${validation.success ? 'border-green-100 bg-green-50 text-green-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`} data-i18n-ignore="true">
                         期望 Skill: {validation.expectedSkill} | 实际 Skill: {validation.actualSkill || '—'}
                         {validation.reason ? ` | 判断依据: ${validation.reason}` : ''}
                       </div>
                     )}
                     <PlannerSummary data={item.result.plannerResponse} />
+                    {item.result.chatResponse && (
+                      <ChatReplySummary data={item.result.chatResponse} />
+                    )}
                     {item.result.appPkgResponse && (
                       <AppPkgSummary data={item.result.appPkgResponse} />
                     )}
+                    {item.result.movieSearchResponse && (
+                      <MovieSearchSummary data={item.result.movieSearchResponse} />
+                    )}
                     <details className="text-xs">
                       <summary className="text-gray-400 cursor-pointer hover:text-gray-600">查看原始 JSON</summary>
-                      <pre className="mt-2 bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-64 overflow-y-auto">
-                        {JSON.stringify(item.result.plannerResponse, null, 2)}
-                      </pre>
+                      <div className="mt-2 space-y-3">
+                        <div>
+                          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-blue-500">
+                            大模型 Planner 回复
+                          </div>
+                          <pre className="bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-64 overflow-y-auto" data-i18n-ignore="true">
+                            {JSON.stringify(item.result.plannerResponse, null, 2)}
+                          </pre>
+                        </div>
+                        <div>
+                          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-cyan-500">
+                            大模型聊天回复
+                          </div>
+                          <pre className="bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-64 overflow-y-auto" data-i18n-ignore="true">
+                            {JSON.stringify(item.result.chatResponse ?? { message: '未触发 chat/talk 或接口无返回' }, null, 2)}
+                          </pre>
+                        </div>
+                        <div>
+                          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-emerald-500">
+                            getAppPkg 接口回复
+                          </div>
+                          <pre className="bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-64 overflow-y-auto" data-i18n-ignore="true">
+                            {JSON.stringify(item.result.appPkgResponse ?? { message: '未触发 getAppPkg 或接口无返回' }, null, 2)}
+                          </pre>
+                        </div>
+                        <div>
+                          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-violet-500">
+                            影片搜索接口回复
+                          </div>
+                          <pre className="bg-gray-50 rounded-lg p-3 overflow-x-auto text-gray-600 max-h-64 overflow-y-auto" data-i18n-ignore="true">
+                            {JSON.stringify(item.result.movieSearchResponse ?? { message: '未触发 gpt/search 或接口无返回' }, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
                     </details>
                   </div>
                 )}
@@ -763,7 +847,7 @@ const AliasTestPage: React.FC = () => {
           {batchResults.length > 0 && (
             <div className="mb-4 flex flex-wrap gap-2 text-xs">
               {Object.entries(batchStatusSummary).map(([label, count]) => (
-                <span key={label} className="rounded-full bg-gray-100 px-3 py-1 text-gray-700">
+                <span key={label} className="rounded-full bg-gray-100 px-3 py-1 text-gray-700" data-i18n-ignore="true">
                   {label}: {count}
                 </span>
               ))}
@@ -793,6 +877,7 @@ const AliasTestPage: React.FC = () => {
                     <th className="px-3 py-2 text-left">结果</th>
                     <th className="px-3 py-2 text-left">期望 Skill</th>
                     <th className="px-3 py-2 text-left">实际 Skill</th>
+                    <th className="px-3 py-2 text-left">影片结果</th>
                     <th className="px-3 py-2 text-left">标准名称</th>
                     <th className="px-3 py-2 text-left">匹配应用</th>
                     <th className="px-3 py-2 text-left">错误信息</th>
@@ -802,17 +887,20 @@ const AliasTestPage: React.FC = () => {
                   {batchResults.map((item) => (
                     <tr key={`${item.sourceRow}-${item.question}`} className="border-t border-gray-100">
                       <td className="px-3 py-2 text-gray-500">{item.sourceRow}</td>
-                      <td className="px-3 py-2 text-gray-900">{item.question}</td>
+                      <td className="px-3 py-2 text-gray-900" data-i18n-ignore="true">{item.question}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={`inline-flex whitespace-nowrap px-2 py-0.5 rounded text-xs ${item.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                           {item.success ? '成功' : '失败'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-gray-700">{item.expectedSkill || '-'}</td>
-                      <td className="px-3 py-2 text-gray-700">{item.skill || '-'}</td>
-                      <td className="px-3 py-2 text-gray-700">{item.standardName || '-'}</td>
-                      <td className="px-3 py-2 text-gray-700">{item.matchedApps || '-'}</td>
-                      <td className="px-3 py-2 text-red-600">{item.error || '-'}</td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">{item.expectedSkill || '-'}</td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">{item.skill || '-'}</td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">
+                        {item.movieResultCount > 0 ? `${item.movieResultCount} 条 / ${item.topMovieName || '-'}` : '-'}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">{item.standardName || '-'}</td>
+                      <td className="px-3 py-2 text-gray-700" data-i18n-ignore="true">{item.matchedApps || '-'}</td>
+                      <td className="px-3 py-2 text-red-600" data-i18n-ignore="true">{item.error || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -858,7 +946,7 @@ const SearchableSelect: React.FC<{
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(!open)}
         className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white hover:bg-gray-50 flex items-center gap-2 min-w-[200px] text-left">
-        <span className="flex-1 truncate">{current?.label || value}</span>
+        <span className="flex-1 truncate" data-i18n-ignore="true">{current?.label || value}</span>
         <span className="text-gray-400 text-xs">▼</span>
       </button>
       {open && (
@@ -874,7 +962,7 @@ const SearchableSelect: React.FC<{
               <button key={o.code} type="button"
                 onClick={() => { onChange(o.code); setOpen(false); }}
                 className={`w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50 ${o.code === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
-                {o.label}
+                <span data-i18n-ignore="true">{o.label}</span>
               </button>
             ))}
           </div>
@@ -904,20 +992,20 @@ const PlannerSummary: React.FC<{ data: any }> = ({ data }) => {
       <div className="flex flex-wrap gap-3 text-sm">
         <div className="px-3 py-1.5 bg-blue-50 rounded-lg">
           <span className="text-gray-500">Skill: </span>
-          <span className="font-medium text-blue-700">{skill}</span>
+          <span className="font-medium text-blue-700" data-i18n-ignore="true">{skill}</span>
         </div>
         <div className="px-3 py-1.5 bg-purple-50 rounded-lg">
           <span className="text-gray-500">Category: </span>
-          <span className="font-medium text-purple-700">{category}</span>
+          <span className="font-medium text-purple-700" data-i18n-ignore="true">{category}</span>
         </div>
         <div className="px-3 py-1.5 bg-green-50 rounded-lg">
           <span className="text-gray-500">Action: </span>
-          <span className="font-medium text-green-700">{action}</span>
+          <span className="font-medium text-green-700" data-i18n-ignore="true">{action}</span>
         </div>
         {app && (
           <div className="px-3 py-1.5 bg-amber-50 rounded-lg">
             <span className="text-gray-500">App: </span>
-            <span className="font-medium text-amber-700">{app}</span>
+            <span className="font-medium text-amber-700" data-i18n-ignore="true">{app}</span>
           </div>
         )}
       </div>
@@ -929,7 +1017,7 @@ const PlannerSummary: React.FC<{ data: any }> = ({ data }) => {
             {Object.entries(params).map(([k, v]) => (
               <div key={k} className="flex gap-2">
                 <span className="text-gray-500 min-w-[80px]">{k}:</span>
-                <span className="text-gray-800 font-mono">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                <span className="text-gray-800 font-mono" data-i18n-ignore="true">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
               </div>
             ))}
           </div>
@@ -939,9 +1027,188 @@ const PlannerSummary: React.FC<{ data: any }> = ({ data }) => {
       {shortcut && (
         <div>
           <div className="text-xs text-gray-500 mb-1">🔗 Shortcut / Deeplink</div>
-          <code className="text-xs bg-indigo-50 text-indigo-700 rounded px-2 py-1 break-all">{shortcut}</code>
+          <code className="text-xs bg-indigo-50 text-indigo-700 rounded px-2 py-1 break-all" data-i18n-ignore="true">{shortcut}</code>
         </div>
       )}
+    </div>
+  );
+};
+
+const ChatReplySummary: React.FC<{ data: any }> = ({ data }) => {
+  if (!data) return null;
+  const d = data.data || data;
+  const replyText = String(d.text || '').trim();
+  const replyType = String(d.type || '—');
+  const replyLanguage = String(d.language || '—');
+
+  if (!replyText) return null;
+
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-1">💬 大模型聊天回复</div>
+      <div className="rounded-lg border border-cyan-100 bg-cyan-50 p-4 space-y-2">
+        <div className="flex flex-wrap gap-3 text-xs">
+          <span className="px-2.5 py-1 rounded-full bg-white text-cyan-700 border border-cyan-200" data-i18n-ignore="true">
+            Type: {replyType}
+          </span>
+          <span className="px-2.5 py-1 rounded-full bg-white text-cyan-700 border border-cyan-200" data-i18n-ignore="true">
+            Language: {replyLanguage}
+          </span>
+        </div>
+        <div className="text-sm leading-6 text-gray-800 whitespace-pre-wrap" data-i18n-ignore="true">
+          {replyText}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MovieSearchSummary: React.FC<{ data: any }> = ({ data }) => {
+  if (!data) return null;
+  const items: any[] = Array.isArray(data.data) ? data.data : [];
+  const errorCode = data.errorCode;
+
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-1">🎬 影片搜索结果</div>
+      <div className="rounded-lg border border-violet-100 bg-violet-50 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="font-medium text-violet-800" data-i18n-ignore="true">返回 {items.length} 条</span>
+          {errorCode !== undefined && (
+            <span className={`text-xs px-2 py-0.5 rounded ${errorCode === 0 ? 'bg-white text-violet-700' : 'bg-red-100 text-red-700'}`} data-i18n-ignore="true">
+              errorCode: {errorCode}
+            </span>
+          )}
+        </div>
+
+        {items.length === 0 && (
+          <div className="rounded-lg bg-white px-3 py-2 text-sm text-gray-500">未返回影片数据</div>
+        )}
+
+        <div className="grid gap-3">
+          {items.slice(0, 10).map((movie, index) => {
+            const verticalUrl = movie.icon || movie.poster || '';
+            const landscapeUrl = movie.poster && movie.poster !== verticalUrl ? movie.poster : '';
+            const categories = Array.isArray(movie.moreInfo?.categories) ? movie.moreInfo.categories.filter((item: any) => item?.name) : [];
+            const contributors = Array.isArray(movie.moreInfo?.contributors) ? movie.moreInfo.contributors.filter((item: any) => item?.contrName) : [];
+            const scores = Array.isArray(movie.moreInfo?.videoScores) ? movie.moreInfo.videoScores.filter((item: any) => item?.type || item?.value) : [];
+            const awards = Array.isArray(movie.awardInfo) ? movie.awardInfo.filter((item: any) => item?.name || item?.awardNm || item?.categoryName) : [];
+            const sourceDeeplinks = Array.isArray(movie.sourceDeeplinks) ? movie.sourceDeeplinks : [];
+            const categoryText = categories.map((item: any) => item.name).join(' / ');
+            const scoreText = scores.map((item: any) => `${item.type}:${item.value}`).join('  ');
+            const directorText = contributors.filter((item: any) => item.role === 'DIRECTOR').map((item: any) => item.contrName).join(' / ');
+            const starringText = contributors.filter((item: any) => item.role === 'STARRING').map((item: any) => item.contrName).slice(0, 5).join(' / ');
+            const durationMinutes = movie.moreInfo?.duration ? Math.round(Number(movie.moreInfo.duration) / 60) : 0;
+            const releaseYear = movie.releaseTime ? new Date(Number(movie.releaseTime)).getFullYear() : '';
+            const detailDescription = movie.moreInfo?.description || movie.briefDesc || '';
+            const originLangs = Array.isArray(movie.moreInfo?.originLangs) ? movie.moreInfo.originLangs.join(' / ') : '';
+
+            return (
+              <details key={`${movie.value || movie.name || index}`} className="group min-w-0 rounded-lg border border-violet-100 bg-white">
+                <summary className="flex cursor-pointer list-none gap-3 p-3 hover:bg-violet-50">
+                  {verticalUrl ? (
+                    <img
+                      src={verticalUrl}
+                      alt=""
+                      className="h-24 w-16 rounded object-cover bg-gray-100 flex-shrink-0"
+                      data-i18n-ignore="true"
+                    />
+                  ) : (
+                    <div className="h-24 w-16 rounded bg-gray-100 flex-shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900" data-i18n-ignore="true">{index + 1}. {movie.name || '—'}</span>
+                      {releaseYear && <span className="text-xs rounded bg-gray-100 px-2 py-0.5 text-gray-600" data-i18n-ignore="true">{releaseYear}</span>}
+                      {movie.views && <span className="text-xs rounded bg-amber-50 px-2 py-0.5 text-amber-700" data-i18n-ignore="true">views: {movie.views}</span>}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500 break-words" data-i18n-ignore="true">
+                      {[categoryText, durationMinutes ? `${durationMinutes} min` : '', scoreText].filter(Boolean).join(' · ') || movie.sourceName || '-'}
+                    </div>
+                    <div className="mt-2 max-h-10 overflow-hidden text-sm leading-5 text-gray-700 break-words" data-i18n-ignore="true">
+                      {movie.briefDesc || movie.moreInfo?.description || '-'}
+                    </div>
+                  </div>
+                  <span className="text-xs text-violet-500 self-start group-open:hidden">展开</span>
+                  <span className="text-xs text-violet-500 self-start hidden group-open:inline">收起</span>
+                </summary>
+                <div className="min-w-0 overflow-hidden border-t border-violet-100 p-3 text-xs text-gray-600 space-y-2">
+                  {landscapeUrl && (
+                    <img
+                      src={landscapeUrl}
+                      alt=""
+                      className="max-h-72 w-full rounded object-cover bg-gray-100"
+                      data-i18n-ignore="true"
+                    />
+                  )}
+                  {detailDescription && (
+                    <div className="rounded bg-white p-3 text-sm leading-6 text-gray-700 break-words" data-i18n-ignore="true">
+                      {detailDescription}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2" data-i18n-ignore="true">
+                    {categoryText && <div className="min-w-0 break-words">分类: {categoryText}</div>}
+                    {scoreText && <div className="min-w-0 break-words">评分: {scoreText}</div>}
+                    {durationMinutes > 0 && <div className="min-w-0 break-words">时长: {durationMinutes} min</div>}
+                    {releaseYear && <div className="min-w-0 break-words">年份: {releaseYear}</div>}
+                    {originLangs && <div className="min-w-0 break-words">原始语言: {originLangs}</div>}
+                    {movie.moreInfo?.defaultLangCode && <div className="min-w-0 break-words">默认语言: {movie.moreInfo.defaultLangCode}</div>}
+                    {directorText && <div className="min-w-0 break-words">导演: {directorText}</div>}
+                    {starringText && <div className="min-w-0 break-words">主演: {starringText}</div>}
+                    <div className="min-w-0 break-words">source: {movie.sourceName || '-'}</div>
+                    <div className="min-w-0 break-words">sourceId: {movie.sourceId ?? '-'}</div>
+                    <div className="min-w-0 break-words">resourceStatus: {movie.resourceStatus ?? '-'}</div>
+                    <div className="min-w-0 break-words">rsType: {movie.rsType ?? '-'}</div>
+                    <div className="min-w-0 break-words">adultLock: {String(movie.adultLock ?? '-')}</div>
+                    <div className="min-w-0 break-all">value: {movie.value || '-'}</div>
+                  </div>
+                  {contributors.length > 0 && (
+                    <div className="rounded bg-white p-3">
+                      <div className="mb-2 text-xs font-medium text-gray-500">演职员</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2" data-i18n-ignore="true">
+                        {contributors.slice(0, 10).map((person: any, personIndex: number) => (
+                          <div key={`${person.contrId || person.contrName}-${personIndex}`} className="flex min-w-0 items-center gap-2">
+                            {person.icon && <img src={person.icon} alt="" className="h-8 w-8 rounded-full object-cover bg-gray-100" />}
+                            <div className="min-w-0">
+                              <div className="truncate text-gray-800">{person.contrName}</div>
+                              <div className="text-[11px] text-gray-400">{person.role || '-'}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {awards.length > 0 && (
+                    <div className="rounded bg-white p-3">
+                      <div className="mb-2 text-xs font-medium text-gray-500">奖项</div>
+                      <div className="flex flex-wrap gap-2" data-i18n-ignore="true">
+                        {awards.slice(0, 8).map((award: any, awardIndex: number) => (
+                          <span key={`${award.id || award.categoryName}-${awardIndex}`} className="rounded border border-amber-100 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                            {(award.name || award.awardNm || 'Award')} {award.year ? `${award.year}` : ''} · {award.winnerNominee || '-'} · {award.categoryName || '-'}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {sourceDeeplinks.length > 0 && (
+                    <div className="rounded bg-white p-3">
+                      <div className="mb-2 text-xs font-medium text-gray-500">片源 Deeplink</div>
+                      <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-gray-50 p-2 text-[11px]" data-i18n-ignore="true">
+                        {JSON.stringify(sourceDeeplinks, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  {movie.deeplink && (
+                    <pre className="max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-gray-50 p-2 text-[11px]" data-i18n-ignore="true">
+                      {JSON.stringify(movie.deeplink, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };
@@ -977,11 +1244,11 @@ const AppPkgSummary: React.FC<{ data: any }> = ({ data }) => {
       <div className="bg-gray-50 rounded-lg p-4 space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${tagClass}`}>
-            {typeInfo.icon} {typeInfo.label}
+            <span data-i18n-ignore="true">{typeInfo.icon} {typeInfo.label}</span>
           </span>
           {hasStandardName && (
             <span className="text-sm text-gray-700">
-              标准名称: <span className="font-medium text-gray-900">{standardName}</span>
+              标准名称: <span className="font-medium text-gray-900" data-i18n-ignore="true">{standardName}</span>
             </span>
           )}
           {!hasStandardName && appList.length === 0 && (
@@ -999,12 +1266,12 @@ const AppPkgSummary: React.FC<{ data: any }> = ({ data }) => {
               {appList.map((app: any, i: number) => (
                 <div key={i} className="bg-white rounded-lg border border-gray-200 p-3 flex items-center gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{app.appName || '—'}</div>
-                    <div className="text-xs text-gray-500 font-mono truncate mt-0.5">{app.pkgName || '—'}</div>
+                    <div className="text-sm font-medium text-gray-900 truncate" data-i18n-ignore="true">{app.appName || '—'}</div>
+                    <div className="text-xs text-gray-500 font-mono truncate mt-0.5" data-i18n-ignore="true">{app.pkgName || '—'}</div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`text-xs px-2 py-0.5 rounded ${app.resourceStatus === 2 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {RS_STATUS_MAP[app.resourceStatus] || `status:${app.resourceStatus}`}
+                      <span data-i18n-ignore="true">{RS_STATUS_MAP[app.resourceStatus] || `status:${app.resourceStatus}`}</span>
                     </span>
                     {app.rsType !== undefined && (
                       <span className="text-xs text-gray-400">rsType: {app.rsType}</span>
@@ -1019,7 +1286,7 @@ const AppPkgSummary: React.FC<{ data: any }> = ({ data }) => {
         {appList.length === 0 && objectType !== 1 && (
           <details className="text-xs">
             <summary className="text-gray-400 cursor-pointer hover:text-gray-600">查看原始数据</summary>
-            <pre className="mt-2 bg-white rounded-lg p-3 overflow-x-auto text-gray-600 border border-gray-200">
+            <pre className="mt-2 bg-white rounded-lg p-3 overflow-x-auto text-gray-600 border border-gray-200" data-i18n-ignore="true">
               {JSON.stringify(d, null, 2)}
             </pre>
           </details>

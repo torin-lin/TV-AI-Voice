@@ -595,6 +595,9 @@ const DashboardPage: React.FC = () => {
                       <p className="mt-2 text-xs text-red-700 break-words" title={record.qaEarlyInterventionReason}>
                         {record.qaEarlyInterventionReason}
                       </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        责任人 {record.qaEarlyInterventionOwner || '-'}
+                      </p>
                     </div>
                     <span className="text-xs text-blue-700">进入工作台</span>
                   </div>

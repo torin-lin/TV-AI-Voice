@@ -10,6 +10,7 @@ import { Button } from '../../../components/common/Button';
 import { Input } from '../../../components/common/Input';
 import { apiGetReleaseVersions, apiAIAssist, ReleaseVersion } from '../../../services/KnowledgeBaseApiClient';
 import RecommendationResult from './RecommendationResult';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 type Tab = 'knowledge' | 'recommend' | 'assistant';
 
@@ -32,6 +33,7 @@ const PROJECT_MAP: Record<string, string> = { 'TV AI Voice': 'TV', 'Projector AI
 
 const RecommendationsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const { formatDate } = useI18n();
   const { testCases, stats, categories, currentRecommendation, loading, importLoading, recommendLoading, error } = useSelector((s: RootState) => s.recommendations);
   const currentProject = useSelector((s: RootState) => s.project.currentProject);
   const currentPT = currentProject === '全部' ? undefined : PROJECT_MAP[currentProject];
@@ -226,7 +228,7 @@ const RecommendationsPage: React.FC = () => {
                       <option value="">请选择版本...</option>
                       {releaseVersions.map((v) => (
                         <option key={v.version} value={v.version}>
-                          {v.version}{v.projectType ? ` (${v.projectType})` : ''} — {new Date(v.latestDate).toLocaleDateString('zh-CN')}
+                          {v.version}{v.projectType ? ` (${v.projectType})` : ''} — {formatDate(v.latestDate)}
                         </option>
                       ))}
                     </select>

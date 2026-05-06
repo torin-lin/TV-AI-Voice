@@ -73,6 +73,25 @@ export async function apiQueryReleaseNotes(
   return apiFetch<PaginationResult<ReleaseNote>>(`/api/release-notes?${params.toString()}`);
 }
 
+export async function apiQueryReleaseNotesFlat(
+  filters: QueryFilter = {},
+  pagination: PaginationOptions = { page: 1, pageSize: 200 }
+): Promise<PaginationResult<ReleaseNote>> {
+  const params = new URLSearchParams();
+  params.set('page', String(pagination.page));
+  params.set('pageSize', String(pagination.pageSize));
+  params.set('flat', 'true');
+
+  if (filters.changeType) params.set('changeType', filters.changeType);
+  if (filters.severity) params.set('severity', filters.severity);
+  if (filters.branch) params.set('branch', filters.branch);
+  if (filters.projectGroup) params.set('projectGroup', filters.projectGroup);
+  if (filters.startDate) params.set('startDate', String(filters.startDate));
+  if (filters.endDate) params.set('endDate', String(filters.endDate));
+
+  return apiFetch<PaginationResult<ReleaseNote>>(`/api/release-notes?${params.toString()}`);
+}
+
 export async function apiSearchReleaseNotes(
   keyword: string,
   pagination: PaginationOptions = { page: 1, pageSize: 20 }

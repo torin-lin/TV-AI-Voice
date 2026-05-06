@@ -3,7 +3,7 @@
  * 解决前端直接调用 zmind API 的 CORS 问题
  */
 
-const ZMIND_API_KEY = '4428437a4b5c8b4e32fa093ba67a67d46f66a0f2';
+const ZMIND_API_KEY = 'a71efc68745e6a442daf5039b18ae21e639421f7';
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com';
 
 export function setupZmindProxyRoutes(app: any): void {

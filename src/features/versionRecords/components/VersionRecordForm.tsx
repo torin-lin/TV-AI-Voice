@@ -164,6 +164,9 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
     if (isUrgentOverride && !formData.qaEarlyInterventionReason?.trim()) {
       newErrors.qaEarlyInterventionReason = '紧急版本提前介入时必须填写介入原因';
     }
+    if (isUrgentOverride && !formData.qaEarlyInterventionOwner?.trim()) {
+      newErrors.qaEarlyInterventionOwner = '紧急版本提前介入时必须填写介入责任人';
+    }
     if (!formData.versionNumber?.trim()) newErrors.versionNumber = '版本号不能为空';
     if (!formData.changeDescription?.trim()) newErrors.changeDescription = '修改内容不能为空';
     if (!formData.modifiedModules || formData.modifiedModules.length === 0) newErrors.modifiedModules = '至少选择一个修改模块';
@@ -329,6 +332,23 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
             error={errors.qaEarlyInterventionReason}
           />
           <p className="text-xs text-gray-400 mt-1">建议记录紧急背景、影响范围、介入目标和当前已知风险。</p>
+        </div>
+      )}
+
+      {isUrgentOverride && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            介入责任人 <span className="text-red-500">*</span>
+          </label>
+          <Input
+            type="text"
+            name="qaEarlyInterventionOwner"
+            value={formData.qaEarlyInterventionOwner || ''}
+            onChange={handleInputChange}
+            placeholder="填写本次提前介入的责任人"
+            error={errors.qaEarlyInterventionOwner}
+          />
+          <p className="text-xs text-gray-400 mt-1">建议填写当前主跟进人，便于后续回溯和催办。</p>
         </div>
       )}
 

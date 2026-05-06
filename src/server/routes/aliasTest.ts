@@ -8,12 +8,18 @@ import { getDb } from '../storage/sqlite.js';
 const URLS = {
   acc: {
     planner: 'https://acc-planner.zeasn.tv/api/ask',
+    chatStart: 'https://acc-chat.zeasn.tv/api/chat/start',
+    chatTalk: 'https://acc-chat.zeasn.tv/api/chat/talk',
     appPkg: 'https://acc-saas.zeasn.tv/sp/api/device/v1/app/voice/getAppPkg',
+    gptSearch: 'https://acc-saas.zeasn.tv/sp/api/device/v1/gpt/search',
     deviceSign: 'https://acc-saas.zeasn.tv/auth-api/api/v1/auth/deviceSign',
   },
   prod: {
     planner: 'https://planner.zeasn.tv/api/ask',
+    chatStart: 'https://chat.zeasn.tv/api/chat/start',
+    chatTalk: 'https://chat.zeasn.tv/api/chat/talk',
     appPkg: 'https://saas.zeasn.tv/sp/api/device/v1/app/voice/getAppPkg',
+    gptSearch: 'https://saas.zeasn.tv/sp/api/device/v1/gpt/search',
     deviceSign: 'https://saas.zeasn.tv/auth-api/api/v1/auth/deviceSign',
   },
 };
@@ -21,6 +27,7 @@ const URLS = {
 const USER_AGENT = 'ZeasnAOSP/13 (EUI64=E8519Efffe28EA60;DeviceType=WHALEOS_CVTE_CAIXUN_AML950D4_2K_P1028;ProductID=wm100;DeviceSetID=;BrandID=12;ClientPKG=com.zeasn.asrself;ClientVersion=1.4.1.9-MP;ClientVersionNum=14000109;UserAgentVersion=1.0)';
 const FETCH_TIMEOUT_MS = 20000;
 const FETCH_RETRY_COUNT = 1;
+const DEFAULT_DEVICE_ID = 'E8:51:9E:28:EA:60';
 
 // deviceToken 仍用内存缓存（短期有效，重启重新获取即可）
 let cachedDeviceToken = '';
@@ -71,6 +78,97 @@ function setSetting(key: string, value: string): void {
 /** 删除设置 */
 function deleteSetting(key: string): void {
   getDb().prepare('DELETE FROM app_settings WHERE key = ?').run(key);
+}
+
+function normalizeQuestion(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[\uFEFF\u200B-\u200D\u2060]/g, '')
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasPlannerStructuredResult(data: any): boolean {
+  const d = data?.data || data || {};
+  return !!(d.skill || d.intent || d.arguments?.action || d.arguments?.category || d.shortcut || d.deeplink);
+}
+
+function getPlannerSkillName(data: any): string {
+  const rawSkill = data?.data?.skill || data?.skill || data?.data?.intent || data?.intent;
+  if (rawSkill && typeof rawSkill === 'object') {
+    return String(rawSkill.name || '').trim();
+  }
+  return String(rawSkill || '').trim();
+}
+
+function getPlannerSkillEndpoint(data: any): string {
+  const rawSkill = data?.data?.skill || data?.skill || {};
+  return rawSkill && typeof rawSkill === 'object' ? String(rawSkill.endpoint || '').trim().toLowerCase() : '';
+}
+
+function isMovieSearchResult(data: any): boolean {
+  return getPlannerSkillName(data) === 'Movie Search Skill' || getPlannerSkillEndpoint(data).includes('com.zeasn.search');
+}
+
+function shouldCallLlmChat(data: any, question: string): boolean {
+  const d = data?.data || data || {};
+  return !hasPlannerStructuredResult(d) && normalizeQuestion(d.arguments?.question) === normalizeQuestion(question);
+}
+
+function generateTransactionId(): string {
+  return `${Date.now()}${Math.floor(Math.random() * 1_000_000)}`;
+}
+
+async function fetchChatReply(question: string, langCode: string, env: 'acc' | 'prod'): Promise<any | null> {
+  const language = LANG_TO_LOCALE[langCode] || `${langCode || 'en'}-US`;
+  const startUrl = `${URLS[env].chatStart}?deviceId=${encodeURIComponent(DEFAULT_DEVICE_ID)}&language=${encodeURIComponent(language)}&resume=false`;
+  const startRes = await fetchWithRetry(startUrl, {
+    method: 'GET',
+    headers: { 'User-Agent': USER_AGENT },
+  });
+  if (!startRes.ok) return null;
+
+  const startData = await startRes.json();
+  const chatId = String(startData?.data?.chatId || '').trim();
+  if (!chatId) return null;
+
+  const talkUrl = `${URLS[env].chatTalk}?chatId=${encodeURIComponent(chatId)}&text=${encodeURIComponent(question)}&transactionId=${encodeURIComponent(generateTransactionId())}&mac=${encodeURIComponent(DEFAULT_DEVICE_ID)}`;
+  const talkRes = await fetchWithRetry(talkUrl, {
+    method: 'GET',
+    headers: { 'User-Agent': USER_AGENT },
+  });
+  if (!talkRes.ok) return null;
+
+  return talkRes.json();
+}
+
+async function fetchMovieSearch(
+  suggestion: Record<string, any>,
+  deviceToken: string,
+  userToken: string,
+  langCode: string,
+  env: 'acc' | 'prod',
+): Promise<any | null> {
+  if (!deviceToken) return null;
+  const language = LANG_TO_LOCALE[langCode] || `${langCode || 'en'}-US`;
+  const searchUrl = `${URLS[env].gptSearch}?token=${encodeURIComponent(deviceToken)}&countryCode=US&langCode=${encodeURIComponent(language)}&type=suggestion`;
+  const res = await fetchWithRetry(searchUrl, {
+    method: 'POST',
+    headers: {
+      'User-Agent': USER_AGENT,
+      'userToken': userToken,
+      'Content-Type': 'application/json;charset=UTF-8',
+    },
+    body: JSON.stringify({
+      searchTransactionId: `FD${Date.now()}`,
+      suggestion,
+      needAwardInfo: true,
+      transactionId: generateTransactionId(),
+      mac: DEFAULT_DEVICE_ID,
+    }),
+  });
+  if (!res.ok) return null;
+  return res.json();
 }
 
 /** 调用 deviceSign 获取 deviceToken */
@@ -167,6 +265,8 @@ export function setupAliasTestRoutes(app: any): void {
       }
 
       const askData = await askRes.json();
+      let chatResponse = null;
+      let movieSearchResponse = null;
 
       // 如果有 skill 返回，尝试调用 getAppPkg
       let appPkgData = null;
@@ -182,11 +282,29 @@ export function setupAliasTestRoutes(app: any): void {
         } catch { /* ignore */ }
       }
 
+      if (isMovieSearchResult(askData) && cachedDeviceToken) {
+        try {
+          movieSearchResponse = await fetchMovieSearch(askData.data?.arguments || {}, cachedDeviceToken, storedToken, langCode, env);
+        } catch (error) {
+          console.warn('[alias-test] 影片搜索调用失败:', error);
+        }
+      }
+
+      if (shouldCallLlmChat(askData, question)) {
+        try {
+          chatResponse = await fetchChatReply(question, langCode, env);
+        } catch (error) {
+          console.warn('[alias-test] chat 调用失败:', error);
+        }
+      }
+
       res.json({
         success: true,
         data: {
           plannerResponse: askData,
+          chatResponse,
           appPkgResponse: appPkgData,
+          movieSearchResponse,
           requestInfo: { question, productId: pid },
         },
       });

@@ -50,6 +50,8 @@ export interface VersionRecord {
   releaseNoteId?: string;
   /** 紧急版本下 QA 提前介入原因 */
   qaEarlyInterventionReason?: string;
+  /** 紧急版本下 QA 提前介入责任人 */
+  qaEarlyInterventionOwner?: string;
   versionNumber: string;
   /** 关联主版本号，为空表示自身是主版本 */
   parentVersion?: string;

@@ -654,6 +654,9 @@ const VersionWorkbenchPage: React.FC = () => {
                     <div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-3">
                       <p className="text-xs font-semibold text-red-700">提前介入原因</p>
                       <p className="mt-2 text-sm text-red-800 whitespace-pre-wrap break-words">{record.qaEarlyInterventionReason}</p>
+                      {record.qaEarlyInterventionOwner && (
+                        <p className="mt-2 text-xs text-red-700">介入责任人：{record.qaEarlyInterventionOwner}</p>
+                      )}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2 mt-3">

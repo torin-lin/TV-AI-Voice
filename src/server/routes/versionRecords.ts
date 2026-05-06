@@ -134,6 +134,9 @@ export function setupVersionRecordRoutes(app: any): void {
       if (requiresEarlyInterventionReason(releaseNote) && !String(req.body.qaEarlyInterventionReason || '').trim()) {
         return res.status(400).json({ success: false, message: '紧急版本提前介入时必须填写介入原因' });
       }
+      if (requiresEarlyInterventionReason(releaseNote) && !String(req.body.qaEarlyInterventionOwner || '').trim()) {
+        return res.status(400).json({ success: false, message: '紧急版本提前介入时必须填写介入责任人' });
+      }
       const payload = {
         ...req.body,
         versionNumber: releaseNote.version,
@@ -163,6 +166,9 @@ export function setupVersionRecordRoutes(app: any): void {
         }
         if (requiresEarlyInterventionReason(releaseNote) && !String(req.body.qaEarlyInterventionReason || current.qaEarlyInterventionReason || '').trim()) {
           return res.status(400).json({ success: false, message: '紧急版本提前介入时必须填写介入原因' });
+        }
+        if (requiresEarlyInterventionReason(releaseNote) && !String(req.body.qaEarlyInterventionOwner || current.qaEarlyInterventionOwner || '').trim()) {
+          return res.status(400).json({ success: false, message: '紧急版本提前介入时必须填写介入责任人' });
         }
         req.body.versionNumber = releaseNote.version;
         req.body.parentVersion = releaseNote.parentVersion || '';

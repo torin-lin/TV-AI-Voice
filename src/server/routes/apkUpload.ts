@@ -7,12 +7,22 @@
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import {
+  APK_SIGNING_BRANDS,
+  getApkSigningBrandConfig,
+} from '../config/apkSigningBrands';
 
 /** APK 存储根目录 */
 const APK_STORAGE_DIR = process.env.APK_STORAGE_DIR || path.join(process.cwd(), 'uploads', 'apk');
+const APK_SIGNED_STORAGE_DIR =
+  process.env.APK_SIGNED_STORAGE_DIR || path.join(process.cwd(), 'uploads', 'apk-signed');
 
 /** 单文件最大大小: 500MB */
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 
 /**
  * 确保上传目录存在
@@ -21,6 +31,11 @@ function ensureUploadDir(): void {
   if (!fs.existsSync(APK_STORAGE_DIR)) {
     fs.mkdirSync(APK_STORAGE_DIR, { recursive: true });
     console.log(`APK 存储目录已创建: ${APK_STORAGE_DIR}`);
+  }
+
+  if (!fs.existsSync(APK_SIGNED_STORAGE_DIR)) {
+    fs.mkdirSync(APK_SIGNED_STORAGE_DIR, { recursive: true });
+    console.log(`签名 APK 缓存目录已创建: ${APK_SIGNED_STORAGE_DIR}`);
   }
 }
 
@@ -44,12 +59,138 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function assertFileExists(filePath: string, message: string): void {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(message);
+  }
+}
+
+function getStoredApkPath(fileName: string): string {
+  return path.join(APK_STORAGE_DIR, path.basename(fileName));
+}
+
+function buildSignedApkName(sourceFileName: string, brandKey: string): string {
+  const ext = path.extname(sourceFileName) || '.apk';
+  const baseName = path.basename(sourceFileName, ext);
+  return `${baseName}_${brandKey}_signed${ext}`;
+}
+
+function cleanDirectory(dirPath: string): void {
+  if (!fs.existsSync(dirPath)) {
+    return;
+  }
+
+  for (const entry of fs.readdirSync(dirPath)) {
+    const entryPath = path.join(dirPath, entry);
+    const stat = fs.statSync(entryPath);
+    if (stat.isDirectory()) {
+      fs.rmSync(entryPath, { recursive: true, force: true });
+    } else {
+      fs.unlinkSync(entryPath);
+    }
+  }
+}
+
+async function ensureSignedApk(sourceFileName: string, brandKey: string): Promise<string> {
+  const brandConfig = getApkSigningBrandConfig(brandKey);
+  if (!brandConfig) {
+    throw new Error(`不支持的品牌: ${brandKey}`);
+  }
+
+  const sourceFilePath = getStoredApkPath(sourceFileName);
+  assertFileExists(sourceFilePath, '原始 APK 不存在');
+
+  const signerJarPath = path.join(brandConfig.signerDir, brandConfig.signerJarFileName);
+  const certPath = path.join(brandConfig.signerDir, brandConfig.certFileName);
+  const keyPath = path.join(brandConfig.signerDir, brandConfig.keyFileName);
+
+  assertFileExists(signerJarPath, `品牌 ${brandConfig.label} 的 apksigner.jar 不存在`);
+  assertFileExists(certPath, `品牌 ${brandConfig.label} 的签名证书不存在`);
+  assertFileExists(keyPath, `品牌 ${brandConfig.label} 的签名私钥不存在`);
+
+  const brandCacheDir = path.join(APK_SIGNED_STORAGE_DIR, brandConfig.key);
+  if (!fs.existsSync(brandCacheDir)) {
+    fs.mkdirSync(brandCacheDir, { recursive: true });
+  }
+
+  const signedFileName = buildSignedApkName(sourceFileName, brandConfig.key);
+  const signedFilePath = path.join(brandCacheDir, signedFileName);
+
+  if (fs.existsSync(signedFilePath)) {
+    const signedStat = fs.statSync(signedFilePath);
+    const sourceStat = fs.statSync(sourceFilePath);
+    if (signedStat.mtimeMs >= sourceStat.mtimeMs) {
+      return signedFilePath;
+    }
+  }
+
+  const signerTempDir = path.join(os.tmpdir(), 'tv-ai-voice-apk-sign', brandConfig.key);
+  if (!fs.existsSync(signerTempDir)) {
+    fs.mkdirSync(signerTempDir, { recursive: true });
+  }
+  cleanDirectory(signerTempDir);
+
+  const stagedSourceFileName = `source${path.extname(sourceFileName) || '.apk'}`;
+  const stagedOutputFileName = `signed${path.extname(sourceFileName) || '.apk'}`;
+  const stagedSourcePath = path.join(signerTempDir, stagedSourceFileName);
+  const stagedOutputPath = path.join(signerTempDir, stagedOutputFileName);
+
+  fs.copyFileSync(sourceFilePath, stagedSourcePath);
+
+  try {
+    await execFileAsync(
+      'java',
+      [
+        '-jar',
+        brandConfig.signerJarFileName,
+        'sign',
+        '--v1-signing-enabled',
+        'true',
+        '--v2-signing-enabled',
+        'true',
+        '--cert',
+        brandConfig.certFileName,
+        '--key',
+        brandConfig.keyFileName,
+        '--out',
+        stagedOutputPath,
+        stagedSourcePath,
+      ],
+      {
+        cwd: brandConfig.signerDir,
+        windowsHide: true,
+      }
+    );
+  } finally {
+    if (fs.existsSync(stagedSourcePath)) {
+      fs.unlinkSync(stagedSourcePath);
+    }
+  }
+
+  assertFileExists(stagedOutputPath, `品牌 ${brandConfig.label} 的签名 APK 生成失败`);
+  fs.copyFileSync(stagedOutputPath, signedFilePath);
+  fs.unlinkSync(stagedOutputPath);
+
+  assertFileExists(signedFilePath, `品牌 ${brandConfig.label} 的签名 APK 生成失败`);
+  return signedFilePath;
+}
+
 /**
  * 设置 APK 上传路由
  * @param app Express 应用实例
  */
 export function setupApkUploadRoutes(app: any): void {
   ensureUploadDir();
+
+  app.get('/api/apk/sign-brands', (_req: any, res: any) => {
+    res.status(200).json({
+      success: true,
+      data: APK_SIGNING_BRANDS.map((brand) => ({
+        key: brand.key,
+        label: brand.label,
+      })),
+    });
+  });
 
   /**
    * POST /api/apk/upload
@@ -160,6 +301,47 @@ export function setupApkUploadRoutes(app: any): void {
       res.status(500).json({
         success: false,
         message: '下载失败',
+        error: (error as Error).message,
+      });
+    }
+  });
+
+  /**
+   * GET /api/apk/download-signed/:brand/:fileName
+   * 按品牌动态签名并下载 APK
+   */
+  app.get('/api/apk/download-signed/:brand/:fileName', async (req: any, res: any) => {
+    try {
+      const safeName = path.basename(req.params.fileName);
+      const brandKey = String(req.params.brand || '').toLowerCase();
+      const brandConfig = getApkSigningBrandConfig(brandKey);
+
+      if (!brandConfig) {
+        return res.status(400).json({
+          success: false,
+          message: '不支持的品牌签名',
+        });
+      }
+
+      const signedFilePath = await ensureSignedApk(safeName, brandKey);
+      const signedFileName = path.basename(signedFilePath);
+      const stat = fs.statSync(signedFilePath);
+
+      res.setHeader('Content-Length', stat.size);
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(signedFileName)}"`
+      );
+      res.setHeader('X-Apk-Sign-Brand', brandConfig.key);
+
+      const readStream = fs.createReadStream(signedFilePath);
+      readStream.pipe(res);
+    } catch (error) {
+      console.error('品牌签名 APK 下载失败:', error);
+      res.status(500).json({
+        success: false,
+        message: '品牌签名下载失败',
         error: (error as Error).message,
       });
     }

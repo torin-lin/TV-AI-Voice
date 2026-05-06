@@ -42,6 +42,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
       原型来源: record.prototypeSource || '',
       测试结果Excel: record.testResultFileName || '',
       提前介入原因: record.qaEarlyInterventionReason || '',
+      介入责任人: record.qaEarlyInterventionOwner || '',
       备注: record.notes || '',
       创建时间: new Date(record.createdAt).toLocaleString('zh-CN'),
       更新时间: new Date(record.updatedAt).toLocaleString('zh-CN'),
@@ -68,6 +69,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
       { wch: 25 }, // 原型来源
       { wch: 24 }, // 测试结果Excel
       { wch: 28 }, // 提前介入原因
+      { wch: 14 }, // 介入责任人
       { wch: 20 }, // 备注
       { wch: 18 }, // 创建时间
       { wch: 18 }, // 更新时间
@@ -103,6 +105,7 @@ export const exportToCSV = (records: VersionRecord[], filename: string) => {
       原型来源: record.prototypeSource || '',
       测试结果Excel: record.testResultFileName || '',
       提前介入原因: record.qaEarlyInterventionReason || '',
+      介入责任人: record.qaEarlyInterventionOwner || '',
       备注: record.notes || '',
       创建时间: new Date(record.createdAt).toLocaleString('zh-CN'),
       更新时间: new Date(record.updatedAt).toLocaleString('zh-CN'),

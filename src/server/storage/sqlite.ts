@@ -63,6 +63,7 @@ export function initSqlite(): void {
     id TEXT PRIMARY KEY,
     releaseNoteId TEXT,
     qaEarlyInterventionReason TEXT,
+    qaEarlyInterventionOwner TEXT,
     versionNumber TEXT NOT NULL,
     parentVersion TEXT DEFAULT '',
     firmwareVersion TEXT,
@@ -187,6 +188,7 @@ export function initSqlite(): void {
   // version_records 新增 parentVersion 和测试结果附件列
   try { db.exec(`ALTER TABLE version_records ADD COLUMN releaseNoteId TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN qaEarlyInterventionReason TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN qaEarlyInterventionOwner TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN parentVersion TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFileName TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN testResultFilePath TEXT`); } catch { /* 列已存在 */ }
