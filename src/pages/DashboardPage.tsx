@@ -10,6 +10,7 @@ import { apiQueryProblems } from '../services/CustomerProblemApiClient';
 import { fetchVersionRecords } from '../features/versionRecords/store/versionRecordsSlice';
 import { useI18n } from '../i18n/I18nProvider';
 import { getVersionStatusClass } from '../features/versionRecords/versionStatus';
+import { AI_VOICE_EXTENSION_MODULES, COMMON_PROJECT_MODULES } from '../config/projectModules';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -276,6 +277,50 @@ const DashboardPage: React.FC = () => {
               </span>
             </Link>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Card className="border border-blue-100 bg-blue-50/50">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">公共模块基线</h2>
+                <p className="mt-1 text-sm text-gray-600">这些模块可直接复用于其它独立项目。</p>
+              </div>
+              <Link to="/module-center">
+                <span className="inline-flex rounded-lg bg-white px-3 py-2 text-sm font-semibold text-blue-700 shadow-sm">模块中心</span>
+              </Link>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {COMMON_PROJECT_MODULES.map((module) => (
+                <Link key={module.id} to={module.path}>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-700 shadow-sm">
+                    <span>{module.icon}</span>
+                    <span>{module.label}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="border border-violet-100 bg-violet-50/50">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">当前项目扩展</h2>
+                <p className="mt-1 text-sm text-gray-600">AI Voice 专属能力已从公共模块中分离。</p>
+              </div>
+              <span className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-violet-700 shadow-sm">AI Voice</span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {AI_VOICE_EXTENSION_MODULES.map((module) => (
+                <Link key={module.id} to={module.path}>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium text-gray-700 shadow-sm">
+                    <span>{module.icon}</span>
+                    <span>{module.label}</span>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">

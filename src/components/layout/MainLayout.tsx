@@ -5,6 +5,7 @@ import { RootState } from '../../store';
 import { Button } from '../common/Button';
 import ProjectSwitcher from './ProjectSwitcher';
 import { useI18n } from '../../i18n/I18nProvider';
+import { findModuleByPath, NAVIGATION_SECTIONS } from '../../config/projectModules';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -20,22 +21,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const { language, setLanguage, t } = useI18n();
   const sidebarTitle = currentProject === '全部' ? 'AI Voice' : currentProject;
-
-  // 导航菜单项
-  const menuItems = [
-    { path: '/dashboard', label: '仪表板', icon: '📊' },
-    { path: '/version-records', label: 'QA版本记录', icon: '📝' },
-    { path: '/release-notes', label: 'Release Note', icon: '📋' },
-    { path: '/apk-management', label: '项目APK管理', icon: '📦' },
-    { path: '/customer-problems', label: '问题追踪', icon: '🐛' },
-    { path: '/voice-records', label: '语音自动化', icon: '🎤' },
-    { path: '/recommendations', label: '知识库', icon: '📚' },
-    { path: '/alias-test', label: '别名管理测试', icon: '🏷️' },
-    { path: '/settings', label: '设置', icon: '⚙️' },
-  ];
+  const currentModule = findModuleByPath(location.pathname);
 
   // 检查当前路由是否活跃
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string, activePaths: string[] = []) => (
+    location.pathname === path || activePaths.some((activePath) => location.pathname.startsWith(activePath))
+  );
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -61,20 +52,30 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </div>
 
         {/* 菜单 */}
-        <nav className="flex-1 p-4 space-y-2">
-          {menuItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 ${
-                isActive(item.path)
-                  ? 'bg-white/15 text-white font-semibold shimmer-active glow-border backdrop-blur-sm'
-                  : 'hover:bg-white/10 text-white/80 hover:text-white'
-              }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              {sidebarOpen && <span>{item.label}</span>}
-            </Link>
+        <nav className="flex-1 overflow-y-auto p-4 space-y-5">
+          {NAVIGATION_SECTIONS.map((section) => (
+            <div key={section.title} className="space-y-2">
+              {sidebarOpen && (
+                <div className="px-3 text-[11px] font-semibold uppercase tracking-wide text-blue-100/80">
+                  {section.title}
+                </div>
+              )}
+              {section.modules.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 ${
+                    isActive(item.path, item.activePaths)
+                      ? 'bg-white/15 text-white font-semibold shimmer-active glow-border backdrop-blur-sm'
+                      : 'hover:bg-white/10 text-white/80 hover:text-white'
+                  }`}
+                  title={!sidebarOpen ? item.label : undefined}
+                >
+                  <span className="text-xl">{item.icon}</span>
+                  {sidebarOpen && <span>{item.label}</span>}
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -93,7 +94,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           <div className="flex items-center gap-6">
             <ProjectSwitcher />
             <h1 className="text-2xl font-bold text-gray-900">
-              {t(menuItems.find((item) => isActive(item.path))?.label || 'TV AI Voice')}
+              {t(currentModule?.label || 'TV AI Voice')}
             </h1>
           </div>
           <div className="flex items-center gap-4">

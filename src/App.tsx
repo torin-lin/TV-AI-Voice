@@ -11,6 +11,7 @@ import SettingsPage from './pages/SettingsPage';
 import AliasTestPage from './pages/AliasTestPage';
 import VersionWorkbenchPage from './pages/VersionWorkbenchPage';
 import ProjectApkManagementPage from './pages/ProjectApkManagementPage';
+import ModuleCenterPage from './pages/ModuleCenterPage';
 import { useI18n } from './i18n/I18nProvider';
 
 /**
@@ -31,6 +32,7 @@ const App: React.FC = () => {
           <Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/alias-test" element={<AliasTestPage />} />
           <Route path="/apk-management" element={<ProjectApkManagementPage />} />
+          <Route path="/module-center" element={<ModuleCenterPage />} />
           <Route path="/version-workbench/:versionKey" element={<VersionWorkbenchPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
