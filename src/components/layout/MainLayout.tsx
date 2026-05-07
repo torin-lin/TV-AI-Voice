@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store';
-import { setCurrentProject } from '../../store/projectSlice';
+import { setCurrentWorkspace } from '../../store/projectSlice';
 import { Button } from '../common/Button';
 import ProjectSwitcher from './ProjectSwitcher';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -28,19 +28,19 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [projects, setProjects] = useState<ProjectWorkspace[]>(() => getProjectWorkspaces());
   const location = useLocation();
   const dispatch = useDispatch<AppDispatch>();
-  const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
   const { language, setLanguage, t } = useI18n();
-  const sidebarTitle = currentProject === '全部' ? 'AI Voice' : currentProject;
+  const sidebarTitle = currentWorkspace;
   const currentModule = findModuleByPath(location.pathname);
   const navigationSections = useMemo(() => [
     { title: '公共模块', modules: COMMON_PROJECT_MODULES },
-    { title: '扩展模块', modules: getProjectExtensionModules(currentProject) },
+    { title: '扩展模块', modules: getProjectExtensionModules(currentWorkspace) },
     { title: '平台配置', modules: PLATFORM_MODULES },
-  ], [currentProject, projects]);
+  ], [currentWorkspace, projects]);
 
   const handleProjectCreated = (project: ProjectWorkspace) => {
     setProjects(getProjectWorkspaces());
-    dispatch(setCurrentProject(project.id));
+    dispatch(setCurrentWorkspace(project.id));
     setProjectDialogOpen(false);
   };
 
@@ -137,7 +137,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 EN
               </button>
             </div>
-            <ProjectSwitcher projects={projects} />
+            <WorkspaceSwitcher projects={projects} />
+            <ProjectSwitcher />
             <Button variant="secondary" size="sm" onClick={() => setProjectDialogOpen(true)}>
               增加项目
             </Button>
@@ -155,6 +156,31 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           onCreated={handleProjectCreated}
         />
       )}
+    </div>
+  );
+};
+
+const WorkspaceSwitcher: React.FC<{ projects: ProjectWorkspace[] }> = ({ projects }) => {
+  const dispatch = useDispatch<AppDispatch>();
+  const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
+
+  const handleChange = (workspaceId: string) => {
+    localStorage.setItem('current_workspace_id', workspaceId);
+    dispatch(setCurrentWorkspace(workspaceId));
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium text-gray-700">独立项目:</span>
+      <select
+        value={currentWorkspace}
+        onChange={(event) => handleChange(event.target.value)}
+        className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+      >
+        {projects.map((project) => (
+          <option key={project.id} value={project.id}>{project.name}</option>
+        ))}
+      </select>
     </div>
   );
 };

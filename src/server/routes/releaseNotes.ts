@@ -13,6 +13,8 @@ import {
   remove,
 } from '../storage/releaseNoteStorage';
 
+const getWorkspaceId = (req: any) => String(req.query?.workspaceId || req.body?.workspaceId || 'AI Voice').trim() || 'AI Voice';
+
 /**
  * 设置 Release Note API 路由
  */
@@ -38,7 +40,8 @@ export function setupReleaseNoteRoutes(app: any): void {
         flat,
       } = req.query;
 
-      let filtered = [...getAllRecords()];
+      const workspaceId = getWorkspaceId(req);
+      let filtered = [...getAllRecords()].filter((record: any) => (record.workspaceId || 'AI Voice') === workspaceId);
 
       if (changeType) filtered = filtered.filter((r: any) => r.changeType === changeType);
       if (severity) filtered = filtered.filter((r: any) => r.severity === severity);
@@ -118,7 +121,8 @@ export function setupReleaseNoteRoutes(app: any): void {
   app.get('/api/release-notes/parent-versions', (req: any, res: any) => {
     try {
       const { projectType } = req.query;
-      let all = getAllRecords().filter((r: any) => !r.parentVersion);
+      const workspaceId = getWorkspaceId(req);
+      let all = getAllRecords().filter((r: any) => !r.parentVersion && (r.workspaceId || 'AI Voice') === workspaceId);
       if (projectType) all = all.filter((r: any) => r.projectType === projectType);
       const versions = all
         .sort((a: any, b: any) => b.createdAt - a.createdAt)
@@ -136,7 +140,10 @@ export function setupReleaseNoteRoutes(app: any): void {
   app.get('/api/release-notes/eligible-for-qa', (req: any, res: any) => {
     try {
       const { projectType } = req.query;
-      const data = getEligibleQaReleaseNotes(projectType).map((record: any) => ({
+      const workspaceId = getWorkspaceId(req);
+      const data = getEligibleQaReleaseNotes(projectType)
+        .filter((record: any) => (record.workspaceId || 'AI Voice') === workspaceId)
+        .map((record: any) => ({
         id: record.id,
         version: record.version,
         parentVersion: record.parentVersion,

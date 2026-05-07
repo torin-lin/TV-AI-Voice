@@ -26,6 +26,7 @@ export interface ReleaseNote {
   affectedFeatures?: string[];
   breakingChanges?: boolean;
   migrationType?: '无' | '数据迁移' | '配置更新' | '其他';
+  workspaceId?: string;
   projectType?: 'TV' | 'Projector' | 'STB';
   /** 修复的 PR/CR 列表 */
   fixedPRs?: string[];
@@ -65,6 +66,7 @@ export interface VersionRecord {
   smokeTestResult: '通过' | '失败' | '未测试';
   voiceRegressionResult: '通过' | '失败' | '未测试';
   systemRegressionResult: '通过' | '失败' | '未测试';
+  workspaceId?: string;
   projectType?: 'TV' | 'Projector' | 'STB';
   /** 测试周期 */
   testCycle?: string;
@@ -121,6 +123,7 @@ export interface CustomerProblem {
   /** 关联的 QA 问题 ID 列表（仅客户问题使用） */
   linkedQaProblems?: string[];
   /** 项目类型 */
+  workspaceId?: string;
   projectType?: 'TV' | 'Projector' | 'STB';
   /** PR/CR 在 zmind 上的创建时间（追责时间轴依据） */
   issueCreatedAt?: string;
@@ -217,6 +220,7 @@ export interface TestCase {
   /** 优先级 */
   priority: 'L1' | 'L2' | 'L3' | 'L4' | '高' | '中' | '低';
   /** 项目类型 */
+  workspaceId?: string;
   projectType?: 'TV' | 'Projector' | 'STB';
   /** 关键词标签 */
   tags?: string[];

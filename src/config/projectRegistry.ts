@@ -11,10 +11,7 @@ const CUSTOM_PROJECTS_STORAGE_KEY = 'custom_project_workspaces';
 const ALL_EXTENSION_IDS = AI_VOICE_EXTENSION_MODULES.map((module) => module.id);
 
 export const BUILTIN_PROJECT_WORKSPACES: ProjectWorkspace[] = [
-  { id: '全部', name: '全部', extensionModuleIds: ALL_EXTENSION_IDS, builtin: true },
-  { id: 'TV AI Voice', name: 'TV AI Voice', extensionModuleIds: ALL_EXTENSION_IDS, builtin: true },
-  { id: 'Projector AI Voice', name: 'Projector AI Voice', extensionModuleIds: ALL_EXTENSION_IDS, builtin: true },
-  { id: 'STB AI Voice', name: 'STB AI Voice', extensionModuleIds: ALL_EXTENSION_IDS, builtin: true },
+  { id: 'AI Voice', name: 'AI Voice', extensionModuleIds: ALL_EXTENSION_IDS, builtin: true },
 ];
 
 function readCustomProjects(): ProjectWorkspace[] {

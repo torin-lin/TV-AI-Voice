@@ -19,6 +19,7 @@ const DashboardPage: React.FC = () => {
   const { formatDate } = useI18n();
   const versionRecords = useSelector((state: RootState) => state.versionRecords.items);
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
 
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
   const [customerProblems, setCustomerProblems] = useState<CustomerProblem[]>([]);
@@ -35,7 +36,7 @@ const DashboardPage: React.FC = () => {
     apiQueryProblems({ page: 1, pageSize: 200, ...(pg ? { projectGroup: pg } : {}) })
       .then((res) => { setCustomerProblems(res.data); setTotalProblems(res.total); })
       .catch(() => {});
-  }, [currentProject, dispatch]);
+  }, [currentProject, currentWorkspace, dispatch]);
 
   const blockedVersions = useMemo(
     () => versionRecords.filter((v) => v.versionStatus === '阻塞').sort((a, b) => b.updatedAt - a.updatedAt),

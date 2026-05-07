@@ -74,6 +74,7 @@ export function setupVersionIssueRoutes(app: any): void {
           issueId: linkedPR || '',
           firmwareVersion: vr?.firmwareVersion || vr?.versionNumber || '',
           classification: severity || '中',
+          workspaceId: (vr as any)?.workspaceId || 'AI Voice',
           projectType: vr?.projectType as any,
           notes: [
             reporter ? `提交人: ${reporter}` : '',

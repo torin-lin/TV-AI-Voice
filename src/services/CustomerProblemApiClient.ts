@@ -4,6 +4,7 @@
  */
 
 import { CustomerProblem } from '../types/database';
+import { appendWorkspaceParam, withWorkspaceBody } from './WorkspaceContext';
 
 function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
@@ -54,13 +55,14 @@ export async function apiQueryProblems(params: ProblemQueryParams = {}): Promise
   if (params.keyword) qs.set('keyword', params.keyword);
   if (params.startDate) qs.set('startDate', String(params.startDate));
   if (params.endDate) qs.set('endDate', String(params.endDate));
+  appendWorkspaceParam(qs);
   return apiFetch<ProblemPaginationResult>(`/api/customer-problems?${qs.toString()}`);
 }
 
 export async function apiCreateProblem(data: Partial<CustomerProblem>): Promise<string> {
   const result = await apiFetch<{ id: string }>('/api/customer-problems', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify(withWorkspaceBody(data)),
   });
   return result.id;
 }
@@ -68,7 +70,7 @@ export async function apiCreateProblem(data: Partial<CustomerProblem>): Promise<
 export async function apiUpdateProblem(id: string, data: Partial<CustomerProblem>): Promise<void> {
   await apiFetch(`/api/customer-problems/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(data),
+    body: JSON.stringify(withWorkspaceBody(data)),
   });
 }
 

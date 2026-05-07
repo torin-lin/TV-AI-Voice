@@ -34,12 +34,15 @@ const requiresEarlyInterventionReason = (releaseNote: any) => {
   return releaseNote?.severity === '紧急' && releaseNote?.rdSmokeStatus !== '通过';
 };
 
+const getWorkspaceId = (req: any) => String(req.query?.workspaceId || req.body?.workspaceId || 'AI Voice').trim() || 'AI Voice';
+
 export function setupVersionRecordRoutes(app: any): void {
 
   /** GET /api/version-records/parent-versions */
-  app.get('/api/version-records/parent-versions', (_req: any, res: any) => {
+  app.get('/api/version-records/parent-versions', (req: any, res: any) => {
     try {
-      res.json({ success: true, data: getParentVersions() });
+      const workspaceId = getWorkspaceId(req);
+      res.json({ success: true, data: getParentVersions().filter((record: any) => (record.workspaceId || 'AI Voice') === workspaceId) });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
     }
@@ -49,7 +52,9 @@ export function setupVersionRecordRoutes(app: any): void {
   app.get('/api/version-records', (req: any, res: any) => {
     try {
       const { page = '1', pageSize = '20', riskLevel, projectGroup, keyword, versionStatus } = req.query;
+      const workspaceId = getWorkspaceId(req);
       let filtered = [...getAllRecords()];
+      filtered = filtered.filter((r: any) => (r.workspaceId || 'AI Voice') === workspaceId);
 
       if (riskLevel) filtered = filtered.filter((r) => r.riskLevel === riskLevel);
       if (versionStatus) filtered = filtered.filter((r) => (r.versionStatus || '待测试') === versionStatus);
@@ -87,12 +92,16 @@ export function setupVersionRecordRoutes(app: any): void {
   app.get('/api/version-records/search', (req: any, res: any) => {
     try {
       const { keyword = '', page = '1', pageSize = '20' } = req.query;
+      const workspaceId = getWorkspaceId(req);
       const kw = keyword.toLowerCase();
-      let filtered = getAllRecords().filter((r) =>
-        (r.versionNumber || '').toLowerCase().includes(kw) ||
-        (r.changeDescription || '').toLowerCase().includes(kw) ||
-        (r.firmwareVersion || '').toLowerCase().includes(kw)
-      );
+      let filtered = getAllRecords().filter((r) => (
+        ((r as any).workspaceId || 'AI Voice') === workspaceId &&
+        (
+          (r.versionNumber || '').toLowerCase().includes(kw) ||
+          (r.changeDescription || '').toLowerCase().includes(kw) ||
+          (r.firmwareVersion || '').toLowerCase().includes(kw)
+        )
+      ));
       const p = Math.max(1, Number(page));
       const ps = Math.max(1, Number(pageSize));
       const total = filtered.length;
@@ -139,6 +148,7 @@ export function setupVersionRecordRoutes(app: any): void {
       }
       const payload = {
         ...req.body,
+        workspaceId: req.body.workspaceId || releaseNote.workspaceId || 'AI Voice',
         versionNumber: releaseNote.version,
         parentVersion: releaseNote.parentVersion || '',
         projectType: releaseNote.projectType || req.body.projectType,

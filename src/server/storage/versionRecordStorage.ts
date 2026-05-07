@@ -32,9 +32,9 @@ export function findById(id: string): VersionRecord | undefined {
   return row ? rowToRecord(row) : undefined;
 }
 
-export function getParentVersions(): Array<{ id: string; versionNumber: string; projectType?: string }> {
+export function getParentVersions(): Array<{ id: string; versionNumber: string; projectType?: string; workspaceId?: string }> {
   return getDb().prepare(
-    `SELECT id, versionNumber, projectType
+    `SELECT id, versionNumber, projectType, workspaceId
      FROM version_records
      WHERE COALESCE(parentVersion, '') = ''
      ORDER BY createdAt DESC`

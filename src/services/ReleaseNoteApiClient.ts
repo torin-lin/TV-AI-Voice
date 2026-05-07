@@ -4,6 +4,7 @@
  */
 
 import { ReleaseNote, QueryFilter, PaginationOptions, PaginationResult } from '../types/database';
+import { appendWorkspaceParam, withWorkspaceBody } from './WorkspaceContext';
 
 function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
@@ -29,7 +30,7 @@ export async function apiCreateReleaseNote(
 ): Promise<string> {
   const result = await apiFetch<{ id: string }>('/api/release-notes', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify(withWorkspaceBody(data)),
   });
   return result.id;
 }
@@ -45,7 +46,7 @@ export async function apiGetReleaseNote(id: string): Promise<ReleaseNote | null>
 export async function apiUpdateReleaseNote(id: string, data: Partial<ReleaseNote>): Promise<void> {
   await apiFetch(`/api/release-notes/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(data),
+    body: JSON.stringify(withWorkspaceBody(data)),
   });
 }
 
@@ -70,6 +71,7 @@ export async function apiQueryReleaseNotes(
   if (filters.startDate) params.set('startDate', String(filters.startDate));
   if (filters.endDate) params.set('endDate', String(filters.endDate));
 
+  appendWorkspaceParam(params);
   return apiFetch<PaginationResult<ReleaseNote>>(`/api/release-notes?${params.toString()}`);
 }
 
@@ -89,6 +91,7 @@ export async function apiQueryReleaseNotesFlat(
   if (filters.startDate) params.set('startDate', String(filters.startDate));
   if (filters.endDate) params.set('endDate', String(filters.endDate));
 
+  appendWorkspaceParam(params);
   return apiFetch<PaginationResult<ReleaseNote>>(`/api/release-notes?${params.toString()}`);
 }
 
@@ -101,6 +104,7 @@ export async function apiSearchReleaseNotes(
   params.set('page', String(pagination.page));
   params.set('pageSize', String(pagination.pageSize));
 
+  appendWorkspaceParam(params);
   return apiFetch<PaginationResult<ReleaseNote>>(`/api/release-notes/search?${params.toString()}`);
 }
 
@@ -129,11 +133,15 @@ export interface EligibleQaReleaseNoteInfo {
 }
 
 export async function apiGetParentVersions(projectType?: string): Promise<ParentVersionInfo[]> {
-  const qs = projectType ? `?projectType=${projectType}` : '';
-  return apiFetch<ParentVersionInfo[]>(`/api/release-notes/parent-versions${qs}`);
+  const params = new URLSearchParams();
+  if (projectType) params.set('projectType', projectType);
+  appendWorkspaceParam(params);
+  return apiFetch<ParentVersionInfo[]>(`/api/release-notes/parent-versions?${params.toString()}`);
 }
 
 export async function apiGetEligibleQaReleaseNotes(projectType?: string): Promise<EligibleQaReleaseNoteInfo[]> {
-  const qs = projectType ? `?projectType=${projectType}` : '';
-  return apiFetch<EligibleQaReleaseNoteInfo[]>(`/api/release-notes/eligible-for-qa${qs}`);
+  const params = new URLSearchParams();
+  if (projectType) params.set('projectType', projectType);
+  appendWorkspaceParam(params);
+  return apiFetch<EligibleQaReleaseNoteInfo[]>(`/api/release-notes/eligible-for-qa?${params.toString()}`);
 }

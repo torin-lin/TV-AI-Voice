@@ -12,6 +12,8 @@ import {
   remove,
 } from '../storage/customerProblemStorage';
 
+const getWorkspaceId = (req: any) => String(req.query?.workspaceId || req.body?.workspaceId || 'AI Voice').trim() || 'AI Voice';
+
 export function setupCustomerProblemRoutes(app: any): void {
   initCustomerProblemStorage();
 
@@ -30,7 +32,8 @@ export function setupCustomerProblemRoutes(app: any): void {
         endDate,
       } = req.query;
 
-      let filtered = [...getAllRecords()];
+      const workspaceId = getWorkspaceId(req);
+      let filtered = [...getAllRecords()].filter((record: any) => (record.workspaceId || 'AI Voice') === workspaceId);
 
       if (problemType) filtered = filtered.filter((r) => r.problemType === problemType);
       if (classification) filtered = filtered.filter((r) => r.classification === classification);

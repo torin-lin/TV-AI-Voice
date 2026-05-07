@@ -50,6 +50,7 @@ export function initSqlite(): void {
     affectedFeatures TEXT DEFAULT '[]',
     breakingChanges INTEGER DEFAULT 0,
     migrationType TEXT DEFAULT '无',
+    workspaceId TEXT DEFAULT 'AI Voice',
     projectType TEXT,
     apkFileName TEXT,
     apkFileSize INTEGER,
@@ -74,6 +75,7 @@ export function initSqlite(): void {
     smokeTestResult TEXT NOT NULL DEFAULT '未测试',
     voiceRegressionResult TEXT NOT NULL DEFAULT '未测试',
     systemRegressionResult TEXT NOT NULL DEFAULT '未测试',
+    workspaceId TEXT DEFAULT 'AI Voice',
     projectType TEXT,
     testCycle TEXT,
     prototypeSource TEXT,
@@ -107,6 +109,7 @@ export function initSqlite(): void {
     confidence REAL,
     status TEXT NOT NULL DEFAULT '开放',
     linkedQaProblems TEXT DEFAULT '[]',
+    workspaceId TEXT DEFAULT 'AI Voice',
     projectType TEXT,
     issueCreatedAt TEXT DEFAULT '',
     notes TEXT,
@@ -145,6 +148,7 @@ export function initSqlite(): void {
     category TEXT NOT NULL DEFAULT '',
     module TEXT DEFAULT '',
     priority TEXT NOT NULL DEFAULT '中',
+    workspaceId TEXT DEFAULT 'AI Voice',
     projectType TEXT,
     tags TEXT DEFAULT '[]',
     createdAt INTEGER NOT NULL,
@@ -161,15 +165,19 @@ export function initSqlite(): void {
   // 创建索引
   db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_createdAt ON release_notes(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_projectType ON release_notes(projectType)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_workspaceId ON release_notes(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_createdAt ON version_records(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_projectType ON version_records(projectType)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_workspaceId ON version_records(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_createdAt ON customer_problems(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_problemType ON customer_problems(problemType)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_status ON customer_problems(status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_workspaceId ON customer_problems(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vi_versionRecordId ON version_issues(versionRecordId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vi_createdAt ON version_issues(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_category ON test_cases(category)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_projectType ON test_cases(projectType)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_workspaceId ON test_cases(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_createdAt ON test_cases(createdAt)`);
 
   // 增量迁移：给 version_issues 添加新列（兼容已有数据库）
@@ -178,13 +186,16 @@ export function initSqlite(): void {
   try { db.exec(`ALTER TABLE version_issues ADD COLUMN testEnvironment TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_issues ADD COLUMN syncedProblemId TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE customer_problems ADD COLUMN issueCreatedAt TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE customer_problems ADD COLUMN workspaceId TEXT DEFAULT 'AI Voice'`); } catch { /* 列已存在 */ }
   // test_cases 新增 precondition 列
   try { db.exec(`ALTER TABLE test_cases ADD COLUMN precondition TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE test_cases ADD COLUMN workspaceId TEXT DEFAULT 'AI Voice'`); } catch { /* 列已存在 */ }
   // release_notes 新增 parentVersion 列（大版本/子版本层级）
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN parentVersion TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN rdSmokeStatus TEXT DEFAULT '未测试'`); } catch { /* 列已存在 */ }
   // release_notes 新增 fixedPRs 列（修复PR列表）
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN fixedPRs TEXT DEFAULT '[]'`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE release_notes ADD COLUMN workspaceId TEXT DEFAULT 'AI Voice'`); } catch { /* 列已存在 */ }
   // version_records 新增 parentVersion 和测试结果附件列
   try { db.exec(`ALTER TABLE version_records ADD COLUMN releaseNoteId TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN qaEarlyInterventionReason TEXT`); } catch { /* 列已存在 */ }
@@ -200,6 +211,7 @@ export function initSqlite(): void {
   try { db.exec(`ALTER TABLE version_records ADD COLUMN nextActions TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN conclusionOwner TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN conclusionUpdatedAt INTEGER`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE version_records ADD COLUMN workspaceId TEXT DEFAULT 'AI Voice'`); } catch { /* 列已存在 */ }
 
   // 补列之后再创建依赖新列的索引
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_parentVersion ON version_records(parentVersion)`);
