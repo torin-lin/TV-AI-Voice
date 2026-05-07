@@ -12,6 +12,7 @@ import {
 } from '../storage/versionRecordStorage';
 import { VersionStatus } from '../../types/database';
 import { findById as findReleaseNoteById } from '../storage/releaseNoteStorage';
+import { DEFAULT_WORKSPACE_ID, getWorkspaceId, recordInWorkspace } from '../workspace';
 
 const VERSION_STATUS_FLOW: Record<VersionStatus, VersionStatus[]> = {
   '待测试': ['待测试', '测试中', '阻塞'],
@@ -34,15 +35,13 @@ const requiresEarlyInterventionReason = (releaseNote: any) => {
   return releaseNote?.severity === '紧急' && releaseNote?.rdSmokeStatus !== '通过';
 };
 
-const getWorkspaceId = (req: any) => String(req.query?.workspaceId || req.body?.workspaceId || 'AI Voice').trim() || 'AI Voice';
-
 export function setupVersionRecordRoutes(app: any): void {
 
   /** GET /api/version-records/parent-versions */
   app.get('/api/version-records/parent-versions', (req: any, res: any) => {
     try {
       const workspaceId = getWorkspaceId(req);
-      res.json({ success: true, data: getParentVersions().filter((record: any) => (record.workspaceId || 'AI Voice') === workspaceId) });
+      res.json({ success: true, data: getParentVersions().filter((record: any) => recordInWorkspace(record, workspaceId)) });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
     }
@@ -54,7 +53,7 @@ export function setupVersionRecordRoutes(app: any): void {
       const { page = '1', pageSize = '20', riskLevel, projectGroup, keyword, versionStatus } = req.query;
       const workspaceId = getWorkspaceId(req);
       let filtered = [...getAllRecords()];
-      filtered = filtered.filter((r: any) => (r.workspaceId || 'AI Voice') === workspaceId);
+      filtered = filtered.filter((record: any) => recordInWorkspace(record, workspaceId));
 
       if (riskLevel) filtered = filtered.filter((r) => r.riskLevel === riskLevel);
       if (versionStatus) filtered = filtered.filter((r) => (r.versionStatus || '待测试') === versionStatus);
@@ -95,7 +94,7 @@ export function setupVersionRecordRoutes(app: any): void {
       const workspaceId = getWorkspaceId(req);
       const kw = keyword.toLowerCase();
       let filtered = getAllRecords().filter((r) => (
-        ((r as any).workspaceId || 'AI Voice') === workspaceId &&
+        recordInWorkspace(r, workspaceId) &&
         (
           (r.versionNumber || '').toLowerCase().includes(kw) ||
           (r.changeDescription || '').toLowerCase().includes(kw) ||
@@ -148,7 +147,7 @@ export function setupVersionRecordRoutes(app: any): void {
       }
       const payload = {
         ...req.body,
-        workspaceId: req.body.workspaceId || releaseNote.workspaceId || 'AI Voice',
+        workspaceId: req.body.workspaceId || releaseNote.workspaceId || DEFAULT_WORKSPACE_ID,
         versionNumber: releaseNote.version,
         parentVersion: releaseNote.parentVersion || '',
         projectType: releaseNote.projectType || req.body.projectType,
