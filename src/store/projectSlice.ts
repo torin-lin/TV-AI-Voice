@@ -4,7 +4,7 @@
 
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-export type ProjectType = '全部' | 'TV AI Voice' | 'Projector AI Voice' | 'STB AI Voice';
+export type ProjectType = string;
 
 interface ProjectState {
   currentProject: ProjectType;
