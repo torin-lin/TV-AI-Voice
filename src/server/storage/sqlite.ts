@@ -165,19 +165,15 @@ export function initSqlite(): void {
   // 创建索引
   db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_createdAt ON release_notes(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_projectType ON release_notes(projectType)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_workspaceId ON release_notes(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_createdAt ON version_records(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_projectType ON version_records(projectType)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_workspaceId ON version_records(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_createdAt ON customer_problems(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_problemType ON customer_problems(problemType)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_status ON customer_problems(status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_workspaceId ON customer_problems(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vi_versionRecordId ON version_issues(versionRecordId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vi_createdAt ON version_issues(createdAt)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_category ON test_cases(category)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_projectType ON test_cases(projectType)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_workspaceId ON test_cases(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_createdAt ON test_cases(createdAt)`);
 
   // 增量迁移：给 version_issues 添加新列（兼容已有数据库）
@@ -214,6 +210,10 @@ export function initSqlite(): void {
   try { db.exec(`ALTER TABLE version_records ADD COLUMN workspaceId TEXT DEFAULT 'AI Voice'`); } catch { /* 列已存在 */ }
 
   // 补列之后再创建依赖新列的索引
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_workspaceId ON release_notes(workspaceId)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_workspaceId ON version_records(workspaceId)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cp_workspaceId ON customer_problems(workspaceId)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tc_workspaceId ON test_cases(workspaceId)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_parentVersion ON version_records(parentVersion)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_vr_releaseNoteId ON version_records(releaseNoteId)`);
 
