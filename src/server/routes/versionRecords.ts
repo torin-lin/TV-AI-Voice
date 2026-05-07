@@ -12,7 +12,7 @@ import {
 } from '../storage/versionRecordStorage';
 import { VersionStatus } from '../../types/database';
 import { findById as findReleaseNoteById } from '../storage/releaseNoteStorage';
-import { DEFAULT_WORKSPACE_ID, getWorkspaceId, recordInWorkspace } from '../workspace';
+import { DEFAULT_WORKSPACE_ID, getWorkspaceId, recordInProjectGroup, recordInWorkspace } from '../workspace';
 
 const VERSION_STATUS_FLOW: Record<VersionStatus, VersionStatus[]> = {
   '待测试': ['待测试', '测试中', '阻塞'],
@@ -57,13 +57,7 @@ export function setupVersionRecordRoutes(app: any): void {
 
       if (riskLevel) filtered = filtered.filter((r) => r.riskLevel === riskLevel);
       if (versionStatus) filtered = filtered.filter((r) => (r.versionStatus || '待测试') === versionStatus);
-      if (projectGroup && projectGroup !== '全部') {
-        const map: Record<string, string> = {
-          'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB',
-        };
-        const pt = map[projectGroup];
-        if (pt) filtered = filtered.filter((r) => r.projectType === pt);
-      }
+      filtered = filtered.filter((record) => recordInProjectGroup(record, projectGroup));
       if (keyword) {
         const kw = keyword.toLowerCase();
         filtered = filtered.filter((r) =>

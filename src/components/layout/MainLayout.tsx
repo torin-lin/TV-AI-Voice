@@ -1,19 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store';
-import { setCurrentWorkspace } from '../../store/projectSlice';
-import { Button } from '../common/Button';
 import ProjectSwitcher from './ProjectSwitcher';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
-import AddProjectDialog from './AddProjectDialog';
 import { useI18n } from '../../i18n/I18nProvider';
 import {
   COMMON_PROJECT_MODULES,
   findModuleByPath,
   PLATFORM_MODULES,
 } from '../../config/projectModules';
-import { getProjectExtensionModules, getProjectWorkspaces, ProjectWorkspace } from '../../config/projectRegistry';
+import {
+  getProjectExtensionModules,
+  getProjectWorkspaces,
+  getWorkspaceGroupOptions,
+  PROJECT_REGISTRY_EVENT,
+  ProjectWorkspace,
+} from '../../config/projectRegistry';
+import { setCurrentProject } from '../../store/projectSlice';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -25,11 +29,11 @@ interface MainLayoutProps {
  */
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectWorkspace[]>(() => getProjectWorkspaces());
   const location = useLocation();
   const dispatch = useDispatch<AppDispatch>();
   const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
+  const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const { language, setLanguage, t } = useI18n();
   const sidebarTitle = currentWorkspace;
   const currentModule = findModuleByPath(location.pathname);
@@ -39,11 +43,22 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     { title: '平台配置', modules: PLATFORM_MODULES },
   ], [currentWorkspace, projects]);
 
-  const handleProjectCreated = (project: ProjectWorkspace) => {
-    setProjects(getProjectWorkspaces());
-    dispatch(setCurrentWorkspace(project.id));
-    setProjectDialogOpen(false);
-  };
+  useEffect(() => {
+    const refreshProjects = () => setProjects(getProjectWorkspaces());
+    window.addEventListener(PROJECT_REGISTRY_EVENT, refreshProjects);
+    window.addEventListener('storage', refreshProjects);
+    return () => {
+      window.removeEventListener(PROJECT_REGISTRY_EVENT, refreshProjects);
+      window.removeEventListener('storage', refreshProjects);
+    };
+  }, []);
+
+  useEffect(() => {
+    const availableGroups = getWorkspaceGroupOptions(currentWorkspace).map((group) => group.value);
+    if (!availableGroups.includes(currentProject)) {
+      dispatch(setCurrentProject('全部'));
+    }
+  }, [currentProject, currentWorkspace, dispatch, projects]);
 
   // 检查当前路由是否活跃
   const isActive = (path: string, activePaths: string[] = []) => (
@@ -140,9 +155,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </div>
             <WorkspaceSwitcher projects={projects} />
             <ProjectSwitcher />
-            <Button variant="secondary" size="sm" onClick={() => setProjectDialogOpen(true)}>
-              增加项目
-            </Button>
           </div>
         </div>
 
@@ -151,12 +163,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {children}
         </div>
       </div>
-      {projectDialogOpen && (
-        <AddProjectDialog
-          onClose={() => setProjectDialogOpen(false)}
-          onCreated={handleProjectCreated}
-        />
-      )}
     </div>
   );
 };

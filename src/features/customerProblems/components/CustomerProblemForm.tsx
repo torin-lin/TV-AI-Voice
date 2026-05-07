@@ -8,7 +8,8 @@ import { Textarea } from '../../../components/common/Textarea';
 import { Input } from '../../../components/common/Input';
 import { fetchFirmwareVersion } from '../../../services/ZmindApiService';
 import { useI18n } from '../../../i18n/I18nProvider';
-import { CUSTOMER_PROBLEM_STATUS_OPTIONS, DEFAULT_PROBLEM_CLASSIFICATIONS, PROJECT_OPTIONS } from '../../../config/dictionaries';
+import { CUSTOMER_PROBLEM_STATUS_OPTIONS, DEFAULT_PROBLEM_CLASSIFICATIONS } from '../../../config/dictionaries';
+import { useWorkspaceProjectOptions } from '../../../hooks/useWorkspaceProjectOptions';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 
@@ -31,6 +32,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
 }) => {
   const { formatDateTime } = useI18n();
   const qaItems = useSelector((state: RootState) => state.customerProblems.qaItems);
+  const projectOptions = useWorkspaceProjectOptions();
 
   const [formData, setFormData] = useState<Partial<CustomerProblem>>({
     problemType,
@@ -40,7 +42,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
     classification: undefined,
     status: '开放',
     linkedQaProblems: [],
-    projectType: (defaultProjectType as any) || 'TV',
+    projectType: (defaultProjectType as any) || projectOptions[0]?.value || 'TV',
     notes: '',
   });
 
@@ -235,7 +237,7 @@ const CustomerProblemForm: React.FC<CustomerProblemFormProps> = ({
           name="projectType"
           value={formData.projectType || 'TV'}
           onChange={handleInputChange}
-          options={[...PROJECT_OPTIONS]}
+          options={projectOptions}
         />
       </div>
 

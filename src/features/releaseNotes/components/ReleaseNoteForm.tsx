@@ -10,12 +10,12 @@ import {
   DEFAULT_FEATURE_OPTIONS,
   DEFAULT_MODULE_OPTIONS,
   MIGRATION_TYPE_OPTIONS,
-  PROJECT_OPTIONS,
   RELEASE_NOTE_CHANGE_TYPE_OPTIONS,
   RELEASE_NOTE_SEVERITY_OPTIONS,
   RISK_LEVEL_OPTIONS,
   TEST_RESULT_OPTIONS,
 } from '../../../config/dictionaries';
+import { useWorkspaceProjectOptions } from '../../../hooks/useWorkspaceProjectOptions';
 
 interface ReleaseNoteFormProps {
   record?: ReleaseNote | null;
@@ -139,6 +139,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
   onCancel,
   loading = false,
 }) => {
+  const projectOptions = useWorkspaceProjectOptions();
   const [formData, setFormData] = useState<Partial<ReleaseNote>>({
     version: '',
     parentVersion: defaultParentVersion || '',
@@ -155,7 +156,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
     breakingChanges: false,
     migrationType: '无',
     fixedPRs: [],
-    projectType: (defaultProjectType as any) || 'TV',
+    projectType: (defaultProjectType as any) || projectOptions[0]?.value || 'TV',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -341,7 +342,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           <Select
             name="projectType" value={formData.projectType || 'TV'}
             onChange={handleInputChange}
-            options={[...PROJECT_OPTIONS]}
+            options={projectOptions}
           />
         </div>
 

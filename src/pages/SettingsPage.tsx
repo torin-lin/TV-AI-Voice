@@ -4,6 +4,7 @@ import { Input } from '../components/common/Input';
 import { Card } from '../components/common/Card';
 import { useI18n } from '../i18n/I18nProvider';
 import { useToast } from '../components/common/ToastProvider';
+import { Link } from 'react-router-dom';
 
 const SettingsPage: React.FC = () => {
   const { t } = useI18n();
@@ -118,6 +119,19 @@ const SettingsPage: React.FC = () => {
             <p>所有数据存储在服务端 SQLite 数据库中（data/app.db），支持多人共享访问。</p>
             <p>如需备份数据，请直接复制服务器上的 <code className="bg-gray-100 px-1 rounded">data/app.db</code> 文件。</p>
             <p>如需恢复数据，将备份的 <code className="bg-gray-100 px-1 rounded">app.db</code> 文件放回 data 目录并重启服务器即可。</p>
+          </div>
+        </Card>
+
+        <Card className="mt-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">项目与权限管理</h2>
+          <div className="space-y-3 text-sm text-gray-600">
+            <p>独立项目、项目组和扩展模块显示权限统一在模块中心维护，顶部区域只保留切换当前工作上下文。</p>
+            <Link
+              to="/module-center"
+              className="inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              打开模块中心
+            </Link>
           </div>
         </Card>
 

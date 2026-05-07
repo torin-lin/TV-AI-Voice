@@ -7,7 +7,8 @@ import { Textarea } from '../../../components/common/Textarea';
 import { uploadDoc, getDocDownloadUrl, DocUploadResult } from '../../../services/DocUploadService';
 import { formatFileSize } from '../../../services/ApkUploadService';
 import { apiGetEligibleQaReleaseNotes, EligibleQaReleaseNoteInfo } from '../../../services/ReleaseNoteApiClient';
-import { DEFAULT_MODULE_OPTIONS, PROJECT_OPTIONS, RISK_LEVEL_OPTIONS, TEST_RESULT_OPTIONS, VERSION_STATUS_OPTIONS } from '../../../config/dictionaries';
+import { DEFAULT_MODULE_OPTIONS, RISK_LEVEL_OPTIONS, TEST_RESULT_OPTIONS, VERSION_STATUS_OPTIONS } from '../../../config/dictionaries';
+import { useWorkspaceProjectOptions } from '../../../hooks/useWorkspaceProjectOptions';
 
 interface VersionRecordFormProps {
   record?: VersionRecord | null;
@@ -124,6 +125,7 @@ const LinkedIssuesInput: React.FC<{
 };
 
 const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultProjectType, onSubmit, onCancel, loading = false }) => {
+  const projectOptions = useWorkspaceProjectOptions();
   const [formData, setFormData] = useState<Partial<VersionRecord>>({
     versionNumber: '',
     firmwareVersion: '',
@@ -133,7 +135,7 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
     riskLevel: '中',
     voiceRegressionResult: '未测试',
     systemRegressionResult: '未测试',
-    projectType: (defaultProjectType as any) || 'TV',
+    projectType: (defaultProjectType as any) || projectOptions[0]?.value || 'TV',
     testCycle: '',
     prototypeSource: '',
     languageModel: '',
@@ -370,7 +372,7 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">项目类型</label>
         <Select name="projectType" value={formData.projectType || 'TV'} onChange={handleInputChange}
-          options={[...PROJECT_OPTIONS]} />
+          options={projectOptions} />
       </div>
 
       {/* 固件版本号 */}

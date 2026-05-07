@@ -11,7 +11,7 @@ import {
   update,
   remove,
 } from '../storage/customerProblemStorage';
-import { getWorkspaceId, recordInWorkspace } from '../workspace';
+import { getWorkspaceId, recordInProjectGroup, recordInWorkspace } from '../workspace';
 
 export function setupCustomerProblemRoutes(app: any): void {
   initCustomerProblemStorage();
@@ -37,13 +37,7 @@ export function setupCustomerProblemRoutes(app: any): void {
       if (problemType) filtered = filtered.filter((r) => r.problemType === problemType);
       if (classification) filtered = filtered.filter((r) => r.classification === classification);
       if (status) filtered = filtered.filter((r) => r.status === status);
-      if (projectGroup && projectGroup !== '全部') {
-        const map: Record<string, string> = {
-          'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB',
-        };
-        const pt = map[projectGroup];
-        if (pt) filtered = filtered.filter((r) => r.projectType === pt);
-      }
+      filtered = filtered.filter((record) => recordInProjectGroup(record, projectGroup));
       if (keyword) {
         const kw = keyword.toLowerCase();
         filtered = filtered.filter((r) =>

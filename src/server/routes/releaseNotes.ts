@@ -12,7 +12,7 @@ import {
   update,
   remove,
 } from '../storage/releaseNoteStorage';
-import { getWorkspaceId, recordInWorkspace } from '../workspace';
+import { getWorkspaceId, recordInProjectGroup, recordInWorkspace } from '../workspace';
 
 /**
  * 设置 Release Note API 路由
@@ -45,13 +45,7 @@ export function setupReleaseNoteRoutes(app: any): void {
       if (changeType) filtered = filtered.filter((r: any) => r.changeType === changeType);
       if (severity) filtered = filtered.filter((r: any) => r.severity === severity);
       if (branch) filtered = filtered.filter((r: any) => r.branch === branch);
-      if (projectGroup && projectGroup !== '全部') {
-        const map: Record<string, string> = {
-          'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB',
-        };
-        const pt = map[projectGroup];
-        if (pt) filtered = filtered.filter((r: any) => r.projectType === pt);
-      }
+      filtered = filtered.filter((record: any) => recordInProjectGroup(record, projectGroup));
       if (startDate && endDate) {
         const s = Number(startDate), e = Number(endDate);
         filtered = filtered.filter((r: any) => r.createdAt >= s && r.createdAt <= e);
