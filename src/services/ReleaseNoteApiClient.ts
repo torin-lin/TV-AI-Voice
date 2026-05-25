@@ -5,13 +5,14 @@
 
 import { ReleaseNote, QueryFilter, PaginationOptions, PaginationResult } from '../types/database';
 import { appendWorkspaceParam, withWorkspaceBody } from './WorkspaceContext';
+import { authFetch } from './authFetch';
 
 function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${getBaseUrl()}${path}`, {
+  const res = await authFetch(`${getBaseUrl()}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -64,9 +65,12 @@ export async function apiQueryReleaseNotes(
   params.set('page', String(pagination.page));
   params.set('pageSize', String(pagination.pageSize));
 
+  if (filters.keyword) params.set('keyword', filters.keyword);
   if (filters.changeType) params.set('changeType', filters.changeType);
   if (filters.severity) params.set('severity', filters.severity);
   if (filters.branch) params.set('branch', filters.branch);
+  if (filters.rdSmokeStatus) params.set('rdSmokeStatus', filters.rdSmokeStatus);
+  if (filters.author) params.set('author', filters.author);
   if (filters.projectGroup) params.set('projectGroup', filters.projectGroup);
   if (filters.startDate) params.set('startDate', String(filters.startDate));
   if (filters.endDate) params.set('endDate', String(filters.endDate));
@@ -144,4 +148,17 @@ export async function apiGetEligibleQaReleaseNotes(projectType?: string): Promis
   if (projectType) params.set('projectType', projectType);
   appendWorkspaceParam(params);
   return apiFetch<EligibleQaReleaseNoteInfo[]>(`/api/release-notes/eligible-for-qa?${params.toString()}`);
+}
+
+export async function apiGetProjectImpactTags(): Promise<string[]> {
+  const params = new URLSearchParams();
+  appendWorkspaceParam(params);
+  return apiFetch<string[]>(`/api/release-notes/impact-tags?${params.toString()}`);
+}
+
+export async function apiSaveProjectImpactTags(tags: string[]): Promise<string[]> {
+  return apiFetch<string[]>('/api/release-notes/impact-tags', {
+    method: 'PUT',
+    body: JSON.stringify(withWorkspaceBody({ tags })),
+  });
 }

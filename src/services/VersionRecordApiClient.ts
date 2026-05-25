@@ -4,13 +4,14 @@
 
 import { VersionRecord, QueryFilter, PaginationOptions, PaginationResult } from '../types/database';
 import { appendWorkspaceParam, withWorkspaceBody } from './WorkspaceContext';
+import { authFetch } from './authFetch';
 
 function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${getBaseUrl()}${path}`, {
+  const res = await authFetch(`${getBaseUrl()}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });

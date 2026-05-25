@@ -3,6 +3,9 @@
  * 前端调用，将 APK 文件上传到服务端本地存储
  */
 
+import { authFetch } from './authFetch';
+import { getCurrentWorkspaceId } from './WorkspaceContext';
+
 /** 自动获取服务端地址 */
 function getApiBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
@@ -42,6 +45,9 @@ export async function uploadApk(
     xhr.open('POST', `${baseUrl}/api/apk/upload`);
     xhr.setRequestHeader('x-file-name', encodeURIComponent(file.name));
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    const token = localStorage.getItem('auth_token');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('x-workspace-id', getCurrentWorkspaceId());
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
@@ -70,7 +76,9 @@ export async function uploadApk(
  * 获取 APK 下载链接
  */
 export function getApkDownloadUrl(filePath: string): string {
-  return `${getApiBaseUrl()}${filePath}`;
+  const token = localStorage.getItem('auth_token') || '';
+  const separator = filePath.includes('?') ? '&' : '?';
+  return `${getApiBaseUrl()}${filePath}${separator}workspaceId=${encodeURIComponent(getCurrentWorkspaceId())}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 }
 
 export function getSignedApkDownloadUrl(filePath: string, brandKey: string): string {
@@ -78,12 +86,13 @@ export function getSignedApkDownloadUrl(filePath: string, brandKey: string): str
   if (!fileName) {
     throw new Error('无效的 APK 下载路径');
   }
-  return `${getApiBaseUrl()}/api/apk/download-signed/${encodeURIComponent(brandKey)}/${encodeURIComponent(fileName)}`;
+  const token = localStorage.getItem('auth_token') || '';
+  return `${getApiBaseUrl()}/api/apk/download-signed/${encodeURIComponent(brandKey)}/${encodeURIComponent(fileName)}?workspaceId=${encodeURIComponent(getCurrentWorkspaceId())}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 }
 
 export async function fetchApkSignBrands(): Promise<ApkSignBrand[]> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/apk/sign-brands`);
+  const res = await authFetch(`${baseUrl}/api/apk/sign-brands?workspaceId=${encodeURIComponent(getCurrentWorkspaceId())}`);
   const result = await res.json();
 
   if (!res.ok || !result.success) {
@@ -98,7 +107,7 @@ export async function fetchApkSignBrands(): Promise<ApkSignBrand[]> {
  */
 export async function deleteApk(fileName: string): Promise<{ success: boolean; message: string }> {
   const baseUrl = getApiBaseUrl();
-  const res = await fetch(`${baseUrl}/api/apk/delete/${encodeURIComponent(fileName)}`, {
+  const res = await authFetch(`${baseUrl}/api/apk/delete/${encodeURIComponent(fileName)}?workspaceId=${encodeURIComponent(getCurrentWorkspaceId())}`, {
     method: 'DELETE',
   });
   return res.json();

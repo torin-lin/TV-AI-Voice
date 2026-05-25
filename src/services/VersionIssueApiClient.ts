@@ -3,6 +3,8 @@
  */
 
 import { VersionIssue, IssueAttachment } from '../types/database';
+import { authFetch } from './authFetch';
+import { appendWorkspaceParam, getCurrentWorkspaceId, withWorkspaceBody } from './WorkspaceContext';
 
 function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
@@ -10,7 +12,10 @@ function getBaseUrl(): string {
 
 /** 获取某版本的问题列表 */
 export async function fetchVersionIssues(versionRecordId: string): Promise<VersionIssue[]> {
-  const res = await fetch(`${getBaseUrl()}/api/version-issues?versionRecordId=${encodeURIComponent(versionRecordId)}`);
+  const params = new URLSearchParams();
+  params.set('versionRecordId', versionRecordId);
+  appendWorkspaceParam(params);
+  const res = await authFetch(`${getBaseUrl()}/api/version-issues?${params.toString()}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.message);
   return json.data;
@@ -25,12 +30,24 @@ export async function createVersionIssue(data: {
   testEnvironment?: string;
   severity?: string;
   linkedPR?: string;
-  reporter: string;
+  reporter?: string;
+  zmindSync?: {
+    enabled: boolean;
+    projectId?: number;
+    trackerId?: number;
+    statusId?: number;
+    priorityId?: number;
+    assignedToId?: number;
+    categoryId?: number;
+    fixedVersionId?: number;
+    fixedVersionName?: string;
+    customFields?: Record<string, string>;
+  };
 }): Promise<string> {
-  const res = await fetch(`${getBaseUrl()}/api/version-issues`, {
+  const res = await authFetch(`${getBaseUrl()}/api/version-issues`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withWorkspaceBody(data)),
   });
   const json = await res.json();
   if (!json.success) throw new Error(json.message);
@@ -39,10 +56,10 @@ export async function createVersionIssue(data: {
 
 /** 更新问题 */
 export async function updateVersionIssue(id: string, data: Partial<VersionIssue>): Promise<void> {
-  const res = await fetch(`${getBaseUrl()}/api/version-issues/${id}`, {
+  const res = await authFetch(`${getBaseUrl()}/api/version-issues/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withWorkspaceBody(data)),
   });
   const json = await res.json();
   if (!json.success) throw new Error(json.message);
@@ -50,7 +67,9 @@ export async function updateVersionIssue(id: string, data: Partial<VersionIssue>
 
 /** 删除问题 */
 export async function deleteVersionIssue(id: string): Promise<void> {
-  const res = await fetch(`${getBaseUrl()}/api/version-issues/${id}`, { method: 'DELETE' });
+  const params = new URLSearchParams();
+  appendWorkspaceParam(params);
+  const res = await authFetch(`${getBaseUrl()}/api/version-issues/${id}?${params.toString()}`, { method: 'DELETE' });
   const json = await res.json();
   if (!json.success) throw new Error(json.message);
 }
@@ -64,7 +83,12 @@ export async function uploadIssueAttachment(
 ): Promise<IssueAttachment> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${getBaseUrl()}/api/version-issues/${issueId}/attachments`);
+    const params = new URLSearchParams();
+    appendWorkspaceParam(params);
+    xhr.open('POST', `${getBaseUrl()}/api/version-issues/${issueId}/attachments?${params.toString()}`);
+    const token = localStorage.getItem('auth_token');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('x-workspace-id', getCurrentWorkspaceId());
     xhr.setRequestHeader('x-file-name', encodeURIComponent(file.name));
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
 
@@ -87,7 +111,9 @@ export async function uploadIssueAttachment(
 
 /** 删除附件 */
 export async function deleteIssueAttachment(issueId: string, savedFileName: string): Promise<void> {
-  const res = await fetch(`${getBaseUrl()}/api/version-issues/${issueId}/attachments/${encodeURIComponent(savedFileName)}`, {
+  const params = new URLSearchParams();
+  appendWorkspaceParam(params);
+  const res = await authFetch(`${getBaseUrl()}/api/version-issues/${issueId}/attachments/${encodeURIComponent(savedFileName)}?${params.toString()}`, {
     method: 'DELETE',
   });
   const json = await res.json();
@@ -96,5 +122,9 @@ export async function deleteIssueAttachment(issueId: string, savedFileName: stri
 
 /** 获取附件下载/预览 URL */
 export function getAttachmentUrl(filePath: string): string {
-  return `${getBaseUrl()}${filePath}`;
+  const token = localStorage.getItem('auth_token');
+  const params = new URLSearchParams();
+  appendWorkspaceParam(params);
+  if (token) params.set('token', token);
+  return `${getBaseUrl()}${filePath}?${params.toString()}`;
 }

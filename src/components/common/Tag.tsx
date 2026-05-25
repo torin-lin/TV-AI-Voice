@@ -14,11 +14,11 @@ export const Tag: React.FC<TagProps> = ({
   variant = 'primary',
   className = '',
 }) => {
-  const baseClasses = 'inline-block px-2.5 py-0.5 rounded-full text-xs font-medium';
+  const baseClasses = 'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium';
 
   const variantClasses = {
-    primary: 'bg-blue-200 text-blue-700',
-    secondary: 'bg-gray-100 text-gray-800',
+    primary: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+    secondary: 'border-slate-200 bg-slate-50 text-slate-600',
   };
 
   return (

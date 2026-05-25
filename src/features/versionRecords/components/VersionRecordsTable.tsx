@@ -11,6 +11,7 @@ import { formatFileSize } from '../../../services/ApkUploadService';
 import VersionIssueList from './VersionIssueList';
 import { useI18n } from '../../../i18n/I18nProvider';
 import { getVersionStatusClass } from '../versionStatus';
+import { usePermission } from '../../../auth/usePermission';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
@@ -40,6 +41,7 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
   records, loading, pagination, sorting, onEdit, onDelete, onPaginationChange, onSortingChange,
 }) => {
   const { formatDateTime } = useI18n();
+  const permission = usePermission();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const showProjectCol = currentProject === '全部';
@@ -173,8 +175,8 @@ const VersionRecordsTable: React.FC<VersionRecordsTableProps> = ({
                                   <Link to={`/customer-problems?keyword=${encodeURIComponent((r.linkedIssues && r.linkedIssues[0]) || r.firmwareVersion || r.versionNumber)}`}>
                                     <Button variant="secondary" size="sm">查看问题</Button>
                                   </Link>
-                                  <Button onClick={() => onEdit(r)} variant="secondary" size="sm">编辑</Button>
-                                  <Button onClick={() => onDelete(r.id!)} variant="danger" size="sm">删除</Button>
+                                  <Button onClick={() => onEdit(r)} variant="secondary" size="sm" disabled={!permission.canEditVersionRecords}>编辑</Button>
+                                  <Button onClick={() => onDelete(r.id!)} variant="danger" size="sm" disabled={!permission.canEditVersionRecords}>删除</Button>
                                 </div>
                               </div>
 

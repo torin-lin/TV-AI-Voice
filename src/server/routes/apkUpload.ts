@@ -14,6 +14,8 @@ import {
   APK_SIGNING_BRANDS,
   getApkSigningBrandConfig,
 } from '../config/apkSigningBrands';
+import { getDb } from '../storage/sqlite';
+import { getWorkspaceId } from '../workspace';
 
 /** APK 存储根目录 */
 const APK_STORAGE_DIR = process.env.APK_STORAGE_DIR || path.join(process.cwd(), 'uploads', 'apk');
@@ -175,6 +177,19 @@ async function ensureSignedApk(sourceFileName: string, brandKey: string): Promis
   return signedFilePath;
 }
 
+function apkBelongsToWorkspace(fileName: string, req: any): boolean {
+  const safeName = path.basename(fileName);
+  const filePath = `/api/apk/download/${safeName}`;
+  const workspaceId = getWorkspaceId(req);
+  const row = getDb().prepare(
+    `SELECT id FROM release_notes
+     WHERE workspaceId = ?
+       AND (apkFilePath = ? OR apkFileName = ?)
+     LIMIT 1`
+  ).get(workspaceId, filePath, safeName);
+  return Boolean(row);
+}
+
 /**
  * 设置 APK 上传路由
  * @param app Express 应用实例
@@ -280,6 +295,12 @@ export function setupApkUploadRoutes(app: any): void {
 
       // 防止路径遍历攻击
       const safeName = path.basename(fileName);
+      if (!apkBelongsToWorkspace(safeName, req)) {
+        return res.status(404).json({
+          success: false,
+          message: '文件不存在',
+        });
+      }
       const filePath = path.join(APK_STORAGE_DIR, safeName);
 
       if (!fs.existsSync(filePath)) {
@@ -315,6 +336,12 @@ export function setupApkUploadRoutes(app: any): void {
       const safeName = path.basename(req.params.fileName);
       const brandKey = String(req.params.brand || '').toLowerCase();
       const brandConfig = getApkSigningBrandConfig(brandKey);
+      if (!apkBelongsToWorkspace(safeName, req)) {
+        return res.status(404).json({
+          success: false,
+          message: '文件不存在',
+        });
+      }
 
       if (!brandConfig) {
         return res.status(400).json({
@@ -355,6 +382,12 @@ export function setupApkUploadRoutes(app: any): void {
     try {
       const { fileName } = req.params;
       const safeName = path.basename(fileName);
+      if (!apkBelongsToWorkspace(safeName, req)) {
+        return res.status(404).json({
+          success: false,
+          message: '文件不存在',
+        });
+      }
       const filePath = path.join(APK_STORAGE_DIR, safeName);
 
       if (!fs.existsSync(filePath)) {
@@ -385,11 +418,23 @@ export function setupApkUploadRoutes(app: any): void {
    * GET /api/apk/list
    * 列出所有已上传的 APK 文件
    */
-  app.get('/api/apk/list', (_req: any, res: any) => {
+  app.get('/api/apk/list', (req: any, res: any) => {
     try {
       ensureUploadDir();
+      const workspaceId = getWorkspaceId(req);
+      const referenced = new Set(
+        (getDb().prepare(
+          `SELECT apkFilePath, apkFileName FROM release_notes WHERE workspaceId = ?`
+        ).all(workspaceId) as any[])
+          .flatMap((row) => [
+            row.apkFilePath ? path.basename(row.apkFilePath) : '',
+            row.apkFileName ? path.basename(row.apkFileName) : '',
+          ])
+          .filter(Boolean)
+      );
       const files = fs.readdirSync(APK_STORAGE_DIR)
         .filter((f: string) => f.endsWith('.apk'))
+        .filter((f: string) => referenced.has(f))
         .map((f: string) => {
           const stat = fs.statSync(path.join(APK_STORAGE_DIR, f));
           return {

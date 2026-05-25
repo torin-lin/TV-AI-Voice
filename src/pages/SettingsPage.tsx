@@ -5,10 +5,14 @@ import { Card } from '../components/common/Card';
 import { useI18n } from '../i18n/I18nProvider';
 import { useToast } from '../components/common/ToastProvider';
 import { Link } from 'react-router-dom';
+import { usePermission } from '../auth/usePermission';
+import UserManagement from '../auth/UserManagement';
+import AuditLogPanel from '../auth/AuditLogPanel';
 
 const SettingsPage: React.FC = () => {
   const { t } = useI18n();
   const { showToast } = useToast();
+  const permission = usePermission();
   const [apiKey, setApiKey] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [modelName, setModelName] = useState('');
@@ -135,11 +139,25 @@ const SettingsPage: React.FC = () => {
           </div>
         </Card>
 
+        {/* 用户管理（仅管理员可见） */}
+        {permission.isAdmin && (
+          <Card className="mt-6">
+            <UserManagement />
+          </Card>
+        )}
+
+        {/* 审计日志（仅管理员可见） */}
+        {permission.isAdmin && (
+          <Card className="mt-6">
+            <AuditLogPanel />
+          </Card>
+        )}
+
         {/* 关于 */}
         <Card className="mt-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">关于</h2>
           <div className="space-y-2 text-sm text-gray-600">
-            <p><span className="font-semibold">应用名称:</span> TV AI Voice 测试全流程体系</p>
+            <p><span className="font-semibold">应用名称:</span> 项目交付管理平台</p>
             <p><span className="font-semibold">版本:</span> 1.0.0</p>
             <p><span className="font-semibold">技术栈:</span> React 18 + TypeScript + Redux Toolkit + Tailwind CSS</p>
             <p><span className="font-semibold">数据存储:</span> SQLite (服务端)</p>

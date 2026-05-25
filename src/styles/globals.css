@@ -10,17 +10,29 @@
 
 html,
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Roboto', 'Helvetica Neue',
+    Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
-/* 蓝色渐变主题 */
 :root {
-  --color-primary-start: #2563EB;
-  --color-primary-end: #06B6D4;
+  --demo-primary: #4f46e5;
+  --demo-primary-hover: #4338ca;
+  --demo-primary-light: #eef2ff;
+  --demo-bg: #f8fafc;
+  --demo-bg-card: #ffffff;
+  --demo-border: #e2e8f0;
+  --demo-border-light: #f1f5f9;
+  --demo-text-primary: #0f172a;
+  --demo-text-secondary: #475569;
+  --demo-text-muted: #64748b;
+  --demo-text-light: #94a3b8;
+  --color-primary-start: #6366f1;
+  --color-primary-end: #4f46e5;
 }
 
 /* 自定义滚动条 */
@@ -30,16 +42,23 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #888;
+  background: #f1f5f9;
   border-radius: 4px;
 }
 
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #94a3b8;
+}
+
+.demo-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
 }
 
 /* 动画 */
@@ -53,27 +72,58 @@ body {
   animation: spin 1s linear infinite;
 }
 
-/* 流光特效 */
-@keyframes shimmer {
-  0% {
-    background-position: -200% center;
+/* 弹窗入场动画 */
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
   }
-  100% {
-    background-position: 200% center;
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
 }
 
+.animate-in {
+  animation: modal-in 0.2s ease-out;
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+thead {
+  background: rgba(248, 250, 252, 0.86);
+}
+
+th {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+tbody tr:hover {
+  background: #f8fafc;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  font: inherit;
+}
+
 .shimmer-active {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.08) 20%,
-    rgba(255, 255, 255, 0.25) 50%,
-    rgba(255, 255, 255, 0.08) 80%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 2.5s ease-in-out infinite;
+  background: rgba(99, 102, 241, 0.1);
 }
 
 /* 按钮流光 */
@@ -92,19 +142,7 @@ body {
 }
 
 .btn-shimmer::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.15),
-    transparent
-  );
-  animation: btn-shimmer 3s ease-in-out infinite;
+  display: none;
 }
 
 /* 侧边栏选中项流光边框 */
@@ -120,6 +158,5 @@ body {
 }
 
 .glow-border {
-  border: 1px solid rgba(96, 165, 250, 0.5);
-  animation: border-flow 2s ease-in-out infinite;
+  border: 1px solid rgba(99, 102, 241, 0.22);
 }

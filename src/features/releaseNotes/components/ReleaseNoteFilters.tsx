@@ -8,6 +8,8 @@ interface ReleaseNoteFiltersProps {
     changeType?: string;
     severity?: string;
     branch?: string;
+    rdSmokeStatus?: string;
+    author?: string;
     startDate?: number;
     endDate?: number;
   };
@@ -16,6 +18,7 @@ interface ReleaseNoteFiltersProps {
 
 const CHANGE_TYPES = ['功能', '修复', '优化', '重构', '文档'];
 const SEVERITIES = ['低', '中', '高', '紧急'];
+const RD_SMOKE_STATUSES = ['未测试', '通过', '失败'];
 
 const ReleaseNoteFilters: React.FC<ReleaseNoteFiltersProps> = ({
   filters,
@@ -35,12 +38,12 @@ const ReleaseNoteFilters: React.FC<ReleaseNoteFiltersProps> = ({
   };
 
   const handleReset = () => {
-    const empty = { keyword: undefined, changeType: undefined, severity: undefined, branch: undefined, startDate: undefined, endDate: undefined };
+    const empty = { keyword: undefined, changeType: undefined, severity: undefined, branch: undefined, rdSmokeStatus: undefined, author: undefined, startDate: undefined, endDate: undefined };
     setLocalFilters(empty);
     onFiltersChange(empty);
   };
 
-  const hasActiveFilters = localFilters.changeType || localFilters.severity || localFilters.branch || localFilters.startDate || localFilters.endDate;
+  const hasActiveFilters = localFilters.changeType || localFilters.severity || localFilters.branch || localFilters.rdSmokeStatus || localFilters.author || localFilters.startDate || localFilters.endDate;
 
   return (
     <div className="bg-white rounded-lg shadow mb-6">
@@ -52,12 +55,13 @@ const ReleaseNoteFilters: React.FC<ReleaseNoteFiltersProps> = ({
             value={localFilters.keyword || ''}
             onChange={(e) => setLocalFilters((prev) => ({ ...prev, keyword: e.target.value || undefined }))}
             onKeyDown={(e) => { if (e.key === 'Enter') onFiltersChange(localFilters); }}
-            placeholder="搜索版本号、分支、作者..."
+            placeholder="搜索版本号、分支、作者、修改内容..."
             className="flex-1"
           />
           <Button onClick={() => onFiltersChange(localFilters)} variant="primary">搜索</Button>
           <Button onClick={() => setIsExpanded(!isExpanded)} variant="secondary">
-            {isExpanded ? '收起筛选' : '条件筛选'}
+            {isExpanded ? '收起' : '筛选'}
+            {hasActiveFilters && <span className="ml-1 w-2 h-2 bg-blue-500 rounded-full inline-block"></span>}
           </Button>
           {hasActiveFilters && (
             <Button onClick={handleReset} variant="secondary">重置</Button>
@@ -67,8 +71,21 @@ const ReleaseNoteFilters: React.FC<ReleaseNoteFiltersProps> = ({
 
       {isExpanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
+          {/* RD 冒烟状态 */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-500 mr-1">修改类型:</span>
+            <span className="text-sm text-gray-500 mr-1 w-20">冒烟状态:</span>
+            {RD_SMOKE_STATUSES.map((s) => (
+              <button
+                key={s} type="button" onClick={() => toggleFilter('rdSmokeStatus', s)}
+                className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                  localFilters.rdSmokeStatus === s ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'
+                }`}
+              >{s}</button>
+            ))}
+          </div>
+          {/* 修改类型 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-gray-500 mr-1 w-20">修改类型:</span>
             {CHANGE_TYPES.map((t) => (
               <button
                 key={t} type="button" onClick={() => toggleFilter('changeType', t)}
@@ -78,8 +95,9 @@ const ReleaseNoteFilters: React.FC<ReleaseNoteFiltersProps> = ({
               >{t}</button>
             ))}
           </div>
+          {/* 严重程度 */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-gray-500 mr-1">严重程度:</span>
+            <span className="text-sm text-gray-500 mr-1 w-20">严重程度:</span>
             {SEVERITIES.map((s) => (
               <button
                 key={s} type="button" onClick={() => toggleFilter('severity', s)}
@@ -89,16 +107,21 @@ const ReleaseNoteFilters: React.FC<ReleaseNoteFiltersProps> = ({
               >{s}</button>
             ))}
           </div>
+          {/* 分支和作者 */}
           <div className="flex gap-3 items-end flex-wrap">
-            <div className="flex-1 min-w-[150px]">
+            <div className="flex-1 min-w-[140px]">
               <label className="block text-xs text-gray-500 mb-1">分支</label>
               <Input type="text" name="branch" value={localFilters.branch || ''} onChange={(e) => updateAndApply({ branch: e.target.value || undefined })} placeholder="main, develop..." />
             </div>
-            <div className="min-w-[150px]">
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-xs text-gray-500 mb-1">作者</label>
+              <Input type="text" name="author" value={localFilters.author || ''} onChange={(e) => updateAndApply({ author: e.target.value || undefined })} placeholder="按作者筛选" />
+            </div>
+            <div className="min-w-[140px]">
               <label className="block text-xs text-gray-500 mb-1">开始日期</label>
               <Input type="date" name="startDate" value={localFilters.startDate ? new Date(localFilters.startDate).toISOString().split('T')[0] : ''} onChange={(e) => updateAndApply({ startDate: e.target.value ? new Date(e.target.value).getTime() : undefined })} />
             </div>
-            <div className="min-w-[150px]">
+            <div className="min-w-[140px]">
               <label className="block text-xs text-gray-500 mb-1">结束日期</label>
               <Input type="date" name="endDate" value={localFilters.endDate ? new Date(localFilters.endDate).toISOString().split('T')[0] : ''} onChange={(e) => updateAndApply({ endDate: e.target.value ? new Date(e.target.value).getTime() : undefined })} />
             </div>

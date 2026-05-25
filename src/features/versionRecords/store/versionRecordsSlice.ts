@@ -16,6 +16,7 @@ interface VersionRecordsState {
   items: VersionRecord[];
   loading: boolean;
   error: string | null;
+  activeWorkspaceId: string;
   filters: QueryFilter;
   pagination: { page: number; pageSize: number; total: number };
   sorting: { field: string; order: 'asc' | 'desc' };
@@ -25,6 +26,7 @@ const initialState: VersionRecordsState = {
   items: [],
   loading: false,
   error: null,
+  activeWorkspaceId: '',
   filters: {},
   pagination: { page: 1, pageSize: 20, total: 0 },
   sorting: { field: 'createdAt', order: 'desc' },
@@ -32,7 +34,7 @@ const initialState: VersionRecordsState = {
 
 export const fetchVersionRecords = createAsyncThunk(
   'versionRecords/fetchVersionRecords',
-  async ({ filters, pagination }: { filters: QueryFilter; pagination: PaginationOptions }, { rejectWithValue }) => {
+  async ({ filters, pagination }: { filters: QueryFilter; pagination: PaginationOptions; workspaceId?: string }, { rejectWithValue }) => {
     try {
       return await apiQueryVersionRecords(filters, pagination);
     } catch (error) {
@@ -107,13 +109,24 @@ const versionRecordsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchVersionRecords.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchVersionRecords.pending, (state, action) => {
+        state.loading = true;
+        state.error = null;
+        state.activeWorkspaceId = action.meta.arg.workspaceId || '';
+        state.items = [];
+        state.pagination.total = 0;
+      })
       .addCase(fetchVersionRecords.fulfilled, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeWorkspaceId) return;
         state.loading = false;
         state.items = action.payload.data;
         state.pagination.total = action.payload.total;
       })
-      .addCase(fetchVersionRecords.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
+      .addCase(fetchVersionRecords.rejected, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeWorkspaceId) return;
+        state.loading = false;
+        state.error = action.payload as string;
+      })
       .addCase(createVersionRecord.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(createVersionRecord.fulfilled, (state, action) => {
         state.loading = false;

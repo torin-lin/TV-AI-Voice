@@ -5,12 +5,15 @@
 
 import {
   getAllTestCases, searchTestCases,
+  findTestCaseById,
   createTestCase, updateTestCase, removeTestCase,
-  bulkCreateTestCases, getCategories, getTestCaseCount,
+  bulkCreateTestCases,
 } from '../storage/testCaseStorage';
 import { getAllRecords as getAllVersionIssues } from '../storage/versionIssueStorage';
+import { getAllRecords as getAllVersionRecords } from '../storage/versionRecordStorage';
 import { getAllRecords as getAllCustomerProblems } from '../storage/customerProblemStorage';
 import { getAllRecords as getAllReleaseNotes } from '../storage/releaseNoteStorage';
+import { getWorkspaceId, recordInWorkspace } from '../workspace';
 
 export function setupKnowledgeBaseRoutes(app: any): void {
 
@@ -18,12 +21,14 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   app.get('/api/knowledge-base/test-cases', (req: any, res: any) => {
     try {
       const { keyword, category, projectType } = req.query;
+      const workspaceId = getWorkspaceId(req);
       let cases;
       if (keyword) {
         cases = searchTestCases(keyword);
       } else {
         cases = getAllTestCases();
       }
+      cases = cases.filter((c: any) => recordInWorkspace(c, workspaceId));
       if (category) cases = cases.filter((c: any) => c.category === category);
       if (projectType) cases = cases.filter((c: any) => c.projectType === projectType);
       res.json({ success: true, data: cases, total: cases.length });
@@ -33,9 +38,16 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   });
 
   /** GET /api/knowledge-base/categories - 获取所有分类 */
-  app.get('/api/knowledge-base/categories', (_req: any, res: any) => {
+  app.get('/api/knowledge-base/categories', (req: any, res: any) => {
     try {
-      res.json({ success: true, data: getCategories() });
+      const workspaceId = getWorkspaceId(req);
+      const categories = Array.from(new Set(
+        getAllTestCases()
+          .filter((c: any) => recordInWorkspace(c, workspaceId))
+          .map((c: any) => c.category)
+          .filter(Boolean)
+      )).sort();
+      res.json({ success: true, data: categories });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
     }
@@ -45,7 +57,8 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   app.get('/api/knowledge-base/release-versions', (req: any, res: any) => {
     try {
       const { projectType } = req.query;
-      let notes = getAllReleaseNotes();
+      const workspaceId = getWorkspaceId(req);
+      let notes = getAllReleaseNotes().filter((n: any) => recordInWorkspace(n, workspaceId));
       if (projectType) notes = notes.filter((n: any) => n.projectType === projectType);
       // 按版本号聚合，合并同版本的修改内容和模块
       const versionMap = new Map<string, any>();
@@ -84,15 +97,23 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   });
 
   /** GET /api/knowledge-base/stats - 知识库统计 */
-  app.get('/api/knowledge-base/stats', (_req: any, res: any) => {
+  app.get('/api/knowledge-base/stats', (req: any, res: any) => {
     try {
-      const totalCases = getTestCaseCount();
-      const categories = getCategories();
-      const totalIssues = getAllVersionIssues().length;
-      const totalProblems = getAllCustomerProblems().length;
-      const totalReleaseNotes = getAllReleaseNotes().length;
+      const workspaceId = getWorkspaceId(req);
+      const cases = getAllTestCases().filter((c: any) => recordInWorkspace(c, workspaceId));
+      const categories = Array.from(new Set(cases.map((c: any) => c.category).filter(Boolean))).sort();
+      const releaseNotes = getAllReleaseNotes().filter((n: any) => recordInWorkspace(n, workspaceId));
+      const totalCases = cases.length;
+      const versionRecordWorkspaceMap = new Map(
+        getAllVersionRecords().map((record: any) => [record.id, record.workspaceId || 'AI Voice'])
+      );
+      const totalIssues = getAllVersionIssues().filter((issue: any) =>
+        versionRecordWorkspaceMap.get(issue.versionRecordId) === workspaceId
+      ).length;
+      const totalProblems = getAllCustomerProblems().filter((p: any) => recordInWorkspace(p, workspaceId)).length;
+      const totalReleaseNotes = releaseNotes.length;
       // 统计不同版本数
-      const versionSet = new Set(getAllReleaseNotes().map((n: any) => n.version).filter(Boolean));
+      const versionSet = new Set(releaseNotes.map((n: any) => n.version).filter(Boolean));
       res.json({ success: true, data: { totalCases, totalCategories: categories.length, categories, totalIssues, totalProblems, totalReleaseNotes, totalVersions: versionSet.size } });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
@@ -103,6 +124,7 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   app.post('/api/knowledge-base/test-cases', (req: any, res: any) => {
     try {
       const { caseName, description, steps, expectedResult, category, module, priority, projectType, tags, caseId, precondition } = req.body;
+      const workspaceId = getWorkspaceId(req);
       if (!caseName) return res.status(400).json({ success: false, message: '用例名称不能为空' });
       const id = createTestCase({
         caseId: caseId || '',
@@ -114,6 +136,7 @@ export function setupKnowledgeBaseRoutes(app: any): void {
         category: category || '',
         module: module || '',
         priority: priority || 'L3',
+        workspaceId,
         projectType,
         tags: tags || [],
       });
@@ -127,6 +150,7 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   app.post('/api/knowledge-base/test-cases/bulk', (req: any, res: any) => {
     try {
       const { cases } = req.body;
+      const workspaceId = getWorkspaceId(req);
       if (!Array.isArray(cases) || cases.length === 0) {
         return res.status(400).json({ success: false, message: '用例列表不能为空' });
       }
@@ -140,6 +164,7 @@ export function setupKnowledgeBaseRoutes(app: any): void {
         category: c.category || '',
         module: c.module || '',
         priority: c.priority || 'L3',
+        workspaceId,
         projectType: c.projectType,
         tags: c.tags || [],
       })));
@@ -152,7 +177,11 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   /** PUT /api/knowledge-base/test-cases/:id */
   app.put('/api/knowledge-base/test-cases/:id', (req: any, res: any) => {
     try {
-      const ok = updateTestCase(req.params.id, req.body);
+      const current = findTestCaseById(req.params.id);
+      if (!current || !recordInWorkspace(current, getWorkspaceId(req))) return res.status(404).json({ success: false, message: '未找到' });
+      const data = { ...req.body };
+      delete data.workspaceId;
+      const ok = updateTestCase(req.params.id, data);
       if (!ok) return res.status(404).json({ success: false, message: '未找到' });
       res.json({ success: true });
     } catch (error) {
@@ -163,6 +192,8 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   /** DELETE /api/knowledge-base/test-cases/:id */
   app.delete('/api/knowledge-base/test-cases/:id', (req: any, res: any) => {
     try {
+      const current = findTestCaseById(req.params.id);
+      if (!current || !recordInWorkspace(current, getWorkspaceId(req))) return res.status(404).json({ success: false, message: '未找到' });
       const ok = removeTestCase(req.params.id);
       if (!ok) return res.status(404).json({ success: false, message: '未找到' });
       res.json({ success: true });
@@ -175,11 +206,18 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   app.post('/api/knowledge-base/recommend', async (req: any, res: any) => {
     try {
       const { versionRecordId, versionNumber, changeDescription, modules, riskLevel, projectType, useAI, apiKey, endpoint } = req.body;
+      const workspaceId = getWorkspaceId(req);
+      if (versionRecordId) {
+        const versionRecord = getAllVersionRecords().find((record: any) => record.id === versionRecordId);
+        if (!versionRecord || !recordInWorkspace(versionRecord, workspaceId)) {
+          return res.status(404).json({ success: false, message: '版本记录不存在' });
+        }
+      }
 
       // 1. 获取知识库数据
-      const allCases = getAllTestCases();
+      const allCases = getAllTestCases().filter((c: any) => recordInWorkspace(c, workspaceId));
       const allIssues = getAllVersionIssues();
-      const allProblems = getAllCustomerProblems();
+      const allProblems = getAllCustomerProblems().filter((p: any) => recordInWorkspace(p, workspaceId));
 
       // 2. 获取该版本的问题列表
       const versionIssues = versionRecordId
@@ -326,11 +364,14 @@ export function setupKnowledgeBaseRoutes(app: any): void {
   app.post('/api/knowledge-base/ai-assist', async (req: any, res: any) => {
     try {
       const { query, apiKey, endpoint, modelName, projectType } = req.body;
+      const workspaceId = getWorkspaceId(req);
       if (!query) return res.status(400).json({ success: false, message: '请输入内容' });
       if (!apiKey || !endpoint) return res.status(400).json({ success: false, message: '请先在设置中配置 Azure OpenAI' });
 
       // 获取知识库用例供 AI 参考 — 精简版
-      const allCases = getAllTestCases().filter((c: any) => !projectType || !c.projectType || c.projectType === projectType);
+      const allCases = getAllTestCases().filter((c: any) =>
+        recordInWorkspace(c, workspaceId) && (!projectType || !c.projectType || c.projectType === projectType)
+      );
       const cats: Record<string, number> = {};
       for (const c of allCases) { cats[c.category || '未分类'] = (cats[c.category || '未分类'] || 0) + 1; }
       const catSummary = Object.entries(cats).map(([k, v]) => `${k}(${v})`).join('、');

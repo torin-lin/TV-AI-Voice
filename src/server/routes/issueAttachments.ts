@@ -7,6 +7,9 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { findById, update } from '../storage/versionIssueStorage';
+import { getAllRecords as getAllIssues } from '../storage/versionIssueStorage';
+import { findById as findVersionRecord } from '../storage/versionRecordStorage';
+import { getWorkspaceId, recordInWorkspace } from '../workspace';
 import { IssueAttachment } from '../../types/database';
 
 const ATTACHMENT_DIR = process.env.ATTACHMENT_DIR || path.join(process.cwd(), 'uploads', 'issue-attachments');
@@ -41,6 +44,20 @@ function detectFileType(fileName: string): IssueAttachment['fileType'] {
   return 'other';
 }
 
+function issueInRequestWorkspace(issue: any, req: any): boolean {
+  const versionRecord = findVersionRecord(issue.versionRecordId);
+  if (!versionRecord) return false;
+  return recordInWorkspace(versionRecord, getWorkspaceId(req));
+}
+
+function findIssueByAttachment(savedFileName: string, req: any): any | null {
+  const safeName = path.basename(savedFileName);
+  return getAllIssues().find((issue) =>
+    issueInRequestWorkspace(issue, req) &&
+    (issue.attachments || []).some((attachment) => attachment.savedFileName === safeName)
+  ) || null;
+}
+
 export function setupIssueAttachmentRoutes(app: any): void {
   ensureDir();
 
@@ -49,6 +66,9 @@ export function setupIssueAttachmentRoutes(app: any): void {
     try {
       const issue = findById(req.params.id);
       if (!issue) return res.status(404).json({ success: false, message: '问题不存在' });
+      if (!issueInRequestWorkspace(issue, req)) {
+        return res.status(403).json({ success: false, message: '无权访问该项目附件' });
+      }
 
       const originalName = decodeURIComponent(req.headers['x-file-name'] || 'unknown');
       const chunks: Buffer[] = [];
@@ -91,6 +111,9 @@ export function setupIssueAttachmentRoutes(app: any): void {
   /** GET /api/version-issues/attachments/download/:fileName - 下载附件 */
   app.get('/api/version-issues/attachments/download/:fileName', (req: any, res: any) => {
     const safe = path.basename(req.params.fileName);
+    if (!findIssueByAttachment(safe, req)) {
+      return res.status(404).json({ success: false, message: '文件不存在' });
+    }
     const fp = path.join(ATTACHMENT_DIR, safe);
     if (!fs.existsSync(fp)) return res.status(404).json({ success: false, message: '文件不存在' });
 
@@ -123,6 +146,9 @@ export function setupIssueAttachmentRoutes(app: any): void {
     try {
       const issue = findById(req.params.id);
       if (!issue) return res.status(404).json({ success: false, message: '问题不存在' });
+      if (!issueInRequestWorkspace(issue, req)) {
+        return res.status(403).json({ success: false, message: '无权操作该项目附件' });
+      }
 
       const { savedFileName } = req.params;
       const attachments = (issue.attachments || []).filter((a) => a.savedFileName !== savedFileName);

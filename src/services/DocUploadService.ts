@@ -2,6 +2,8 @@
  * 文档上传服务（前端）
  */
 
+import { getCurrentWorkspaceId } from './WorkspaceContext';
+
 function getApiBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
 }
@@ -29,6 +31,9 @@ export async function uploadDoc(
     xhr.open('POST', `${baseUrl}/api/docs/upload`);
     xhr.setRequestHeader('x-file-name', encodeURIComponent(file.name));
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    const token = localStorage.getItem('auth_token');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('x-workspace-id', getCurrentWorkspaceId());
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };
@@ -42,5 +47,7 @@ export async function uploadDoc(
 
 /** 获取文档下载链接 */
 export function getDocDownloadUrl(filePath: string): string {
-  return `${getApiBaseUrl()}${filePath}`;
+  const token = localStorage.getItem('auth_token') || '';
+  const separator = filePath.includes('?') ? '&' : '?';
+  return `${getApiBaseUrl()}${filePath}${separator}workspaceId=${encodeURIComponent(getCurrentWorkspaceId())}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 }

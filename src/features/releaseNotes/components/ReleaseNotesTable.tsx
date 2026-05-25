@@ -7,7 +7,9 @@ import { Button } from '../../../components/common/Button';
 import { Tag } from '../../../components/common/Tag';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { getApkDownloadUrl, formatFileSize } from '../../../services/ApkUploadService';
+import { getDocDownloadUrl } from '../../../services/DocUploadService';
 import { useI18n } from '../../../i18n/I18nProvider';
+import { usePermission } from '../../../auth/usePermission';
 
 const ZMIND_PR_URL = 'https://zmind.whaletv.com/issues/';
 const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
@@ -59,6 +61,11 @@ const getTestResultColor = (result?: string) => {
   return m[result || ''] || 'bg-gray-100 text-gray-800';
 };
 
+const getImpactTags = (record: ReleaseNote) => [
+  ...(record.affectedModules || []),
+  ...(record.affectedFeatures || []),
+].filter((tag, index, arr) => tag && arr.indexOf(tag) === index);
+
 const ReleaseNoteDetailCard: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="min-w-0 rounded-lg border border-blue-100 bg-white/80 p-3 shadow-sm">
     <span className="text-xs font-medium text-gray-500">{label}</span>
@@ -77,6 +84,7 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
   records, qaRecords, loading, pagination, sorting, onEdit, onDelete, onPaginationChange, onSortingChange, onAddChild,
 }) => {
   const { formatDateTime } = useI18n();
+  const permission = usePermission();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [expandedChildIds, setExpandedChildIds] = useState<Set<string>>(new Set());
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
@@ -157,6 +165,7 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                     <td className="px-3 py-3 text-sm font-medium text-gray-900">
                       <div className="flex items-center gap-1.5">
                         {r.version}
+                        {r.apkFileName && <span className="text-xs" title={`APK: ${r.apkFileName}`}>📦</span>}
                         {hasChildren && <span className="text-xs text-gray-400 font-normal">({r.children!.length})</span>}
                         {r.parentVersion && <span className="text-xs text-orange-500 font-normal">← {r.parentVersion}</span>}
                         {!r.parentVersion && onAddChild && (
@@ -208,8 +217,8 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                     <td className="px-3 py-3 text-sm text-gray-600">{formatDateTime(r.createdAt)}</td>
                     <td className="px-3 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-nowrap gap-1">
-                        <Button onClick={() => onEdit(r)} variant="secondary" size="sm">编辑</Button>
-                        <Button onClick={() => onDelete(r.id!)} variant="danger" size="sm">删除</Button>
+                        <Button onClick={() => onEdit(r)} variant="secondary" size="sm" disabled={!permission.canEditReleaseNotes}>编辑</Button>
+                        <Button onClick={() => onDelete(r.id!)} variant="danger" size="sm" disabled={!permission.canEditReleaseNotes}>删除</Button>
                       </div>
                     </td>
                   </tr>
@@ -223,20 +232,12 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                               <ReleaseNoteDetailCard label="修改内容">
                                 <p className="whitespace-pre-wrap break-words">{r.changeDescription}</p>
                               </ReleaseNoteDetailCard>
-                              <ReleaseNoteDetailCard label="受影响模块">
+                              <ReleaseNoteDetailCard label="影响范围">
                                 <div className="flex flex-wrap gap-1 mt-1">
-                                  {r.affectedModules?.map((m) => (
+                                  {getImpactTags(r).map((m) => (
                                     <span key={m} className="px-2 py-0.5 bg-blue-200 text-blue-600 rounded text-xs">{m}</span>
                                   ))}
-                                  {(!r.affectedModules || r.affectedModules.length === 0) && <span className="text-gray-400">-</span>}
-                                </div>
-                              </ReleaseNoteDetailCard>
-                              <ReleaseNoteDetailCard label="受影响功能">
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {r.affectedFeatures?.map((f) => (
-                                    <span key={f} className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">{f}</span>
-                                  ))}
-                                  {(!r.affectedFeatures || r.affectedFeatures.length === 0) && <span className="text-gray-400">-</span>}
+                                  {getImpactTags(r).length === 0 && <span className="text-gray-400">-</span>}
                                 </div>
                               </ReleaseNoteDetailCard>
                               <ReleaseNoteDetailCard label="修复 PR">
@@ -245,6 +246,13 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                                     ? (r as any).fixedPRs.map((pr: string) => <a key={pr} href={`${ZMIND_PR_URL}${pr}`} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 hover:underline">#{pr}</a>)
                                     : <span className="text-gray-400">-</span>}
                                 </div>
+                              </ReleaseNoteDetailCard>
+                              <ReleaseNoteDetailCard label="自测报告">
+                                {r.testReportFileName && r.testReportFilePath ? (
+                                  <a href={getDocDownloadUrl(r.testReportFilePath)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                    {r.testReportFileName}
+                                  </a>
+                                ) : <span className="text-gray-400">-</span>}
                               </ReleaseNoteDetailCard>
                             </ReleaseNoteDetailSection>
                             <ReleaseNoteDetailSection title="研发提测">
@@ -351,8 +359,8 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                               <td className="px-3 py-2 text-sm text-gray-600">{formatDateTime(child.createdAt)}</td>
                               <td className="px-3 py-2 text-sm" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex flex-nowrap gap-1">
-                                  <Button onClick={() => onEdit(child)} variant="secondary" size="sm">编辑</Button>
-                                  <Button onClick={() => onDelete(child.id!)} variant="danger" size="sm">删除</Button>
+                                  <Button onClick={() => onEdit(child)} variant="secondary" size="sm" disabled={!permission.canEditReleaseNotes}>编辑</Button>
+                                  <Button onClick={() => onDelete(child.id!)} variant="danger" size="sm" disabled={!permission.canEditReleaseNotes}>删除</Button>
                                 </div>
                               </td>
                             </tr>
@@ -364,10 +372,10 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                                       <ReleaseNoteDetailCard label="修改内容">
                                         <p className="whitespace-pre-wrap break-words">{child.changeDescription}</p>
                                       </ReleaseNoteDetailCard>
-                                      <ReleaseNoteDetailCard label="受影响模块">
+                                      <ReleaseNoteDetailCard label="影响范围">
                                         <div className="flex flex-wrap gap-1 mt-1">
-                                          {child.affectedModules?.map((m) => <span key={m} className="px-2 py-0.5 bg-blue-200 text-blue-600 rounded text-xs">{m}</span>)}
-                                          {(!child.affectedModules || child.affectedModules.length === 0) && <span className="text-gray-400">-</span>}
+                                          {getImpactTags(child).map((m) => <span key={m} className="px-2 py-0.5 bg-blue-200 text-blue-600 rounded text-xs">{m}</span>)}
+                                          {getImpactTags(child).length === 0 && <span className="text-gray-400">-</span>}
                                         </div>
                                       </ReleaseNoteDetailCard>
                                       <ReleaseNoteDetailCard label="修复 PR">
@@ -376,6 +384,13 @@ const ReleaseNotesTable: React.FC<ReleaseNotesTableProps> = ({
                                             ? (child as any).fixedPRs.map((pr: string) => <a key={pr} href={`${ZMIND_PR_URL}${pr}`} target="_blank" rel="noopener noreferrer" className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 hover:underline">#{pr}</a>)
                                             : <span className="text-gray-400">-</span>}
                                         </div>
+                                      </ReleaseNoteDetailCard>
+                                      <ReleaseNoteDetailCard label="自测报告">
+                                        {child.testReportFileName && child.testReportFilePath ? (
+                                          <a href={getDocDownloadUrl(child.testReportFilePath)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                            {child.testReportFileName}
+                                          </a>
+                                        ) : <span className="text-gray-400">-</span>}
                                       </ReleaseNoteDetailCard>
                                     </ReleaseNoteDetailSection>
                                     <ReleaseNoteDetailSection title="研发提测">

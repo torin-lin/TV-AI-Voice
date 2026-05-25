@@ -55,6 +55,9 @@ export function initSqlite(): void {
     apkFileName TEXT,
     apkFileSize INTEGER,
     apkFilePath TEXT,
+    testReportFileName TEXT,
+    testReportFileSize INTEGER,
+    testReportFilePath TEXT,
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL
   )`);
@@ -192,6 +195,9 @@ export function initSqlite(): void {
   // release_notes 新增 fixedPRs 列（修复PR列表）
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN fixedPRs TEXT DEFAULT '[]'`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE release_notes ADD COLUMN workspaceId TEXT DEFAULT 'AI Voice'`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE release_notes ADD COLUMN testReportFileName TEXT`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE release_notes ADD COLUMN testReportFileSize INTEGER`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE release_notes ADD COLUMN testReportFilePath TEXT`); } catch { /* 列已存在 */ }
   // version_records 新增 parentVersion 和测试结果附件列
   try { db.exec(`ALTER TABLE version_records ADD COLUMN releaseNoteId TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN qaEarlyInterventionReason TEXT`); } catch { /* 列已存在 */ }
@@ -208,6 +214,112 @@ export function initSqlite(): void {
   try { db.exec(`ALTER TABLE version_records ADD COLUMN conclusionOwner TEXT`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN conclusionUpdatedAt INTEGER`); } catch { /* 列已存在 */ }
   try { db.exec(`ALTER TABLE version_records ADD COLUMN workspaceId TEXT DEFAULT 'AI Voice'`); } catch { /* 列已存在 */ }
+
+  // ========== 账号与权限系统表 ==========
+
+  // 用户表
+  db.exec(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    displayName TEXT NOT NULL,
+    passwordHash TEXT NOT NULL,
+    systemRole TEXT NOT NULL DEFAULT 'member',
+    status TEXT NOT NULL DEFAULT 'active',
+    lastLoginAt INTEGER,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  )`);
+
+  // 会话表
+  db.exec(`CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    expiresAt INTEGER NOT NULL
+  )`);
+
+  // 项目成员表（项目级角色）
+  db.exec(`CREATE TABLE IF NOT EXISTS project_members (
+    id TEXT PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    projectRole TEXT NOT NULL DEFAULT 'viewer',
+    createdAt INTEGER NOT NULL,
+    UNIQUE(workspaceId, userId)
+  )`);
+
+  // 用户/会话索引
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expiresAt ON sessions(expiresAt)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pm_workspaceId ON project_members(workspaceId)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pm_userId ON project_members(userId)`);
+
+  // 独立项目配置表
+  db.exec(`CREATE TABLE IF NOT EXISTS project_workspaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    builtin INTEGER DEFAULT 0,
+    createdBy TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  )`);
+
+  db.exec(`CREATE TABLE IF NOT EXISTS project_workspace_modules (
+    workspaceId TEXT NOT NULL,
+    moduleId TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    PRIMARY KEY (workspaceId, moduleId)
+  )`);
+
+  db.exec(`CREATE TABLE IF NOT EXISTS project_workspace_groups (
+    id TEXT PRIMARY KEY,
+    workspaceId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    projectType TEXT NOT NULL,
+    builtin INTEGER DEFAULT 0,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    UNIQUE(workspaceId, id)
+  )`);
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pwg_workspaceId ON project_workspace_groups(workspaceId)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pwm_workspaceId ON project_workspace_modules(workspaceId)`);
+
+  // 用户表增量迁移：新增 phone 和 zmindApiKey 列
+  try { db.exec(`ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE users ADD COLUMN zmindApiKey TEXT DEFAULT ''`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`); } catch { /* 列已存在 */ }
+  try { db.exec(`ALTER TABLE users ADD COLUMN lastLoginAt INTEGER`); } catch { /* 列已存在 */ }
+
+  // 操作审计日志表
+  db.exec(`CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT,
+    username TEXT,
+    action TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    resourceId TEXT,
+    detail TEXT,
+    ip TEXT,
+    createdAt INTEGER NOT NULL
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_createdAt ON audit_logs(createdAt)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_userId ON audit_logs(userId)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource)`);
+
+  // 初始化默认管理员账号（仅在无用户时创建）
+  const userCount = db.prepare(`SELECT COUNT(*) as c FROM users`).get() as any;
+  if (userCount.c === 0) {
+    const adminId = generateId('usr');
+    const now = Date.now();
+    const initialAdminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'admin123';
+    // 简单 hash：实际生产应使用 bcrypt，这里用 sha256 + salt 保持零额外依赖
+    const salt = 'aivoice_salt_';
+    const hash = crypto.createHash('sha256').update(salt + initialAdminPassword).digest('hex');
+    const initialAdminEmail = process.env.INITIAL_ADMIN_EMAIL || 'admin@example.com';
+    db.prepare(`INSERT INTO users (id, username, displayName, passwordHash, systemRole, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(adminId, initialAdminEmail, '管理员', hash, 'admin', 'active', now, now);
+    console.log(`已创建初始管理员账号: ${initialAdminEmail}。请上线前在用户管理中修改初始密码。`);
+  }
 
   // 补列之后再创建依赖新列的索引
   db.exec(`CREATE INDEX IF NOT EXISTS idx_rn_workspaceId ON release_notes(workspaceId)`);

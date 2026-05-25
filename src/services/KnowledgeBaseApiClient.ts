@@ -3,13 +3,15 @@
  */
 
 import { TestCase, KBRecommendation } from '../types/database';
+import { authFetch } from './authFetch';
+import { appendWorkspaceParam, withWorkspaceBody } from './WorkspaceContext';
 
 function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${getBaseUrl()}${path}`, {
+  const res = await authFetch(`${getBaseUrl()}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -27,12 +29,15 @@ export async function apiGetTestCases(params?: { keyword?: string; category?: st
   if (params?.keyword) qs.set('keyword', params.keyword);
   if (params?.category) qs.set('category', params.category);
   if (params?.projectType) qs.set('projectType', params.projectType);
+  appendWorkspaceParam(qs);
   return apiFetch<TestCase[]>(`/api/knowledge-base/test-cases?${qs.toString()}`);
 }
 
 /** 获取分类列表 */
 export async function apiGetCategories(): Promise<string[]> {
-  return apiFetch<string[]>('/api/knowledge-base/categories');
+  const qs = new URLSearchParams();
+  appendWorkspaceParam(qs);
+  return apiFetch<string[]>(`/api/knowledge-base/categories?${qs.toString()}`);
 }
 
 /** Release Note 版本信息 */
@@ -49,20 +54,24 @@ export interface ReleaseVersion {
 
 /** 获取 Release Note 版本列表 */
 export async function apiGetReleaseVersions(projectType?: string): Promise<ReleaseVersion[]> {
-  const qs = projectType ? `?projectType=${projectType}` : '';
-  return apiFetch<ReleaseVersion[]>(`/api/knowledge-base/release-versions${qs}`);
+  const qs = new URLSearchParams();
+  if (projectType) qs.set('projectType', projectType);
+  appendWorkspaceParam(qs);
+  return apiFetch<ReleaseVersion[]>(`/api/knowledge-base/release-versions?${qs.toString()}`);
 }
 
 /** 获取知识库统计 */
 export async function apiGetKBStats(): Promise<{ totalCases: number; totalCategories: number; categories: string[]; totalIssues: number; totalProblems: number; totalReleaseNotes: number; totalVersions: number }> {
-  return apiFetch('/api/knowledge-base/stats');
+  const qs = new URLSearchParams();
+  appendWorkspaceParam(qs);
+  return apiFetch(`/api/knowledge-base/stats?${qs.toString()}`);
 }
 
 /** 创建测试用例 */
 export async function apiCreateTestCase(data: Partial<TestCase>): Promise<string> {
   const result = await apiFetch<{ id: string }>('/api/knowledge-base/test-cases', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify(withWorkspaceBody(data)),
   });
   return result.id;
 }
@@ -71,19 +80,21 @@ export async function apiCreateTestCase(data: Partial<TestCase>): Promise<string
 export async function apiBulkImportTestCases(cases: Partial<TestCase>[]): Promise<number> {
   const result = await apiFetch<{ imported: number }>('/api/knowledge-base/test-cases/bulk', {
     method: 'POST',
-    body: JSON.stringify({ cases }),
+    body: JSON.stringify(withWorkspaceBody({ cases })),
   });
   return result.imported;
 }
 
 /** 更新测试用例 */
 export async function apiUpdateTestCase(id: string, data: Partial<TestCase>): Promise<void> {
-  await apiFetch(`/api/knowledge-base/test-cases/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  await apiFetch(`/api/knowledge-base/test-cases/${id}`, { method: 'PUT', body: JSON.stringify(withWorkspaceBody(data)) });
 }
 
 /** 删除测试用例 */
 export async function apiDeleteTestCase(id: string): Promise<void> {
-  await apiFetch(`/api/knowledge-base/test-cases/${id}`, { method: 'DELETE' });
+  const qs = new URLSearchParams();
+  appendWorkspaceParam(qs);
+  await apiFetch(`/api/knowledge-base/test-cases/${id}?${qs.toString()}`, { method: 'DELETE' });
 }
 
 /** 智能推荐 */
@@ -101,7 +112,7 @@ export async function apiGetRecommendation(params: {
 }): Promise<KBRecommendation> {
   return apiFetch<KBRecommendation>('/api/knowledge-base/recommend', {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify(withWorkspaceBody(params)),
   });
 }
 
@@ -115,6 +126,6 @@ export async function apiAIAssist(params: {
 }): Promise<{ response: string; createdAt: number }> {
   return apiFetch('/api/knowledge-base/ai-assist', {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify(withWorkspaceBody(params)),
   });
 }

@@ -13,6 +13,47 @@ import {
   remove,
 } from '../storage/releaseNoteStorage';
 import { getWorkspaceId, recordInProjectGroup, recordInWorkspace } from '../workspace';
+import { getDb } from '../storage/sqlite';
+import { getProjectRoleForUser } from '../middleware/auth';
+
+function getProjectImpactTags(workspaceId: string): string[] {
+  const row = getDb().prepare('SELECT value FROM app_settings WHERE key = ?').get(`release_note_impact_tags:${workspaceId}`) as any;
+  if (!row?.value) return [];
+  try {
+    const parsed = JSON.parse(row.value);
+    return Array.isArray(parsed) ? parsed.map((tag) => String(tag)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveProjectImpactTags(workspaceId: string, tags: string[]): string[] {
+  const normalized = tags.map((tag) => String(tag).trim()).filter((tag, index, arr) => tag && arr.indexOf(tag) === index);
+  getDb().prepare(`
+    INSERT INTO app_settings (key, value, updatedAt)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt
+  `).run(`release_note_impact_tags:${workspaceId}`, JSON.stringify(normalized), Date.now());
+  return normalized;
+}
+
+function assertCurrentUserIsReleaseNoteRd(req: any, workspaceId: string): true | { status: number; message: string } {
+  if (!req.user?.id) return { status: 401, message: '请先登录' };
+  if (req.user.systemRole === 'admin') return true;
+  if (getProjectRoleForUser(req.user.id, workspaceId) !== 'rd') {
+    return { status: 403, message: '只有管理员或当前项目 RD 可以提交 Release Note' };
+  }
+  return true;
+}
+
+function assertAuthorMatchesCurrentUser(req: any, author: string): true | { status: number; message: string } {
+  const row = getDb().prepare('SELECT displayName, username FROM users WHERE id = ?').get(req.user.id) as any;
+  const allowed = [row?.displayName, row?.username].map((value) => String(value || '').trim()).filter(Boolean);
+  if (!allowed.includes(author)) {
+    return { status: 403, message: '提交人必须是当前登录 RD' };
+  }
+  return true;
+}
 
 /**
  * 设置 Release Note API 路由
@@ -37,6 +78,9 @@ export function setupReleaseNoteRoutes(app: any): void {
         startDate,
         endDate,
         flat,
+        keyword,
+        rdSmokeStatus,
+        author,
       } = req.query;
 
       const workspaceId = getWorkspaceId(req);
@@ -45,10 +89,22 @@ export function setupReleaseNoteRoutes(app: any): void {
       if (changeType) filtered = filtered.filter((r: any) => r.changeType === changeType);
       if (severity) filtered = filtered.filter((r: any) => r.severity === severity);
       if (branch) filtered = filtered.filter((r: any) => r.branch === branch);
+      if (rdSmokeStatus) filtered = filtered.filter((r: any) => (r.rdSmokeStatus || '未测试') === rdSmokeStatus);
+      if (author) filtered = filtered.filter((r: any) => (r.author || '') === author);
       filtered = filtered.filter((record: any) => recordInProjectGroup(record, projectGroup));
       if (startDate && endDate) {
         const s = Number(startDate), e = Number(endDate);
         filtered = filtered.filter((r: any) => r.createdAt >= s && r.createdAt <= e);
+      }
+      if (keyword) {
+        const kw = keyword.toLowerCase();
+        filtered = filtered.filter((r: any) =>
+          (r.version || '').toLowerCase().includes(kw) ||
+          (r.branch || '').toLowerCase().includes(kw) ||
+          (r.author || '').toLowerCase().includes(kw) ||
+          (r.changeDescription || '').toLowerCase().includes(kw) ||
+          (r.commitMessage || '').toLowerCase().includes(kw)
+        );
       }
 
       filtered.sort((a: any, b: any) => b.createdAt - a.createdAt);
@@ -162,9 +218,10 @@ export function setupReleaseNoteRoutes(app: any): void {
   app.get('/api/release-notes/search', (req: any, res: any) => {
     try {
       const { keyword = '', page = '1', pageSize = '20' } = req.query;
+      const workspaceId = getWorkspaceId(req);
       const kw = keyword.toLowerCase();
 
-      let filtered = getAllRecords();
+      let filtered = getAllRecords().filter((record: any) => recordInWorkspace(record, workspaceId));
       if (kw) {
         filtered = filtered.filter(
           (r: any) =>
@@ -190,42 +247,21 @@ export function setupReleaseNoteRoutes(app: any): void {
     }
   });
 
-  /** GET /api/release-notes/:id */
-  app.get('/api/release-notes/:id', (req: any, res: any) => {
-    const record = findById(req.params.id);
-    if (!record) return res.status(404).json({ success: false, message: '记录不存在' });
-    res.json({ success: true, data: record });
+  app.get('/api/release-notes/impact-tags', (req: any, res: any) => {
+    res.json({ success: true, data: getProjectImpactTags(getWorkspaceId(req)) });
   });
 
-  /** POST /api/release-notes */
-  app.post('/api/release-notes', (req: any, res: any) => {
-    try {
-      const id = create(req.body);
-      res.json({ success: true, data: { id } });
-    } catch (error) {
-      res.status(500).json({ success: false, message: (error as Error).message });
-    }
-  });
-
-  /** PUT /api/release-notes/:id */
-  app.put('/api/release-notes/:id', (req: any, res: any) => {
-    if (!update(req.params.id, req.body)) {
-      return res.status(404).json({ success: false, message: '记录不存在' });
-    }
-    res.json({ success: true, message: '更新成功' });
-  });
-
-  /** DELETE /api/release-notes/:id */
-  app.delete('/api/release-notes/:id', (req: any, res: any) => {
-    if (!remove(req.params.id)) {
-      return res.status(404).json({ success: false, message: '记录不存在' });
-    }
-    res.json({ success: true, message: '删除成功' });
+  app.put('/api/release-notes/impact-tags', (req: any, res: any) => {
+    const workspaceId = getWorkspaceId(req);
+    const rdAllowed = assertCurrentUserIsReleaseNoteRd(req, workspaceId);
+    if (rdAllowed !== true) return res.status(rdAllowed.status).json({ success: false, message: rdAllowed.message });
+    res.json({ success: true, data: saveProjectImpactTags(workspaceId, Array.isArray(req.body.tags) ? req.body.tags : []) });
   });
 
   /** GET /api/release-notes/stats/summary */
-  app.get('/api/release-notes/stats/summary', (_req: any, res: any) => {
-    const all = getAllRecords();
+  app.get('/api/release-notes/stats/summary', (req: any, res: any) => {
+    const workspaceId = getWorkspaceId(req);
+    const all = getAllRecords().filter((record: any) => recordInWorkspace(record, workspaceId));
     const byProject: Record<string, number> = {};
     const byType: Record<string, number> = {};
     for (const r of all) {
@@ -234,4 +270,67 @@ export function setupReleaseNoteRoutes(app: any): void {
     }
     res.json({ success: true, data: { total: all.length, byProject, byType } });
   });
+
+  /** GET /api/release-notes/:id */
+  app.get('/api/release-notes/:id', (req: any, res: any) => {
+    const record = findById(req.params.id);
+    if (!record) return res.status(404).json({ success: false, message: '记录不存在' });
+    if (!recordInWorkspace(record, getWorkspaceId(req))) {
+      return res.status(404).json({ success: false, message: '记录不存在' });
+    }
+    res.json({ success: true, data: record });
+  });
+
+  /** POST /api/release-notes */
+  app.post('/api/release-notes', (req: any, res: any) => {
+    try {
+      const workspaceId = getWorkspaceId(req);
+      const rdAllowed = assertCurrentUserIsReleaseNoteRd(req, workspaceId);
+      if (rdAllowed !== true) return res.status(rdAllowed.status).json({ success: false, message: rdAllowed.message });
+      const author = String(req.body.author || '').trim();
+      if (!author) {
+        return res.status(400).json({ success: false, message: '提交人不能为空' });
+      }
+      const authorAllowed = assertAuthorMatchesCurrentUser(req, author);
+      if (authorAllowed !== true) return res.status(authorAllowed.status).json({ success: false, message: authorAllowed.message });
+      const id = create({ ...req.body, author, workspaceId });
+      res.json({ success: true, data: { id } });
+    } catch (error) {
+      res.status(500).json({ success: false, message: (error as Error).message });
+    }
+  });
+
+  /** PUT /api/release-notes/:id */
+  app.put('/api/release-notes/:id', (req: any, res: any) => {
+    const workspaceId = getWorkspaceId(req);
+    const rdAllowed = assertCurrentUserIsReleaseNoteRd(req, workspaceId);
+    if (rdAllowed !== true) return res.status(rdAllowed.status).json({ success: false, message: rdAllowed.message });
+    const record = findById(req.params.id);
+    if (!record || !recordInWorkspace(record, workspaceId)) {
+      return res.status(404).json({ success: false, message: '记录不存在' });
+    }
+    const data = { ...req.body };
+    delete data.workspaceId;
+    delete data.author;
+    if (!update(req.params.id, data)) {
+      return res.status(404).json({ success: false, message: '记录不存在' });
+    }
+    res.json({ success: true, message: '更新成功' });
+  });
+
+  /** DELETE /api/release-notes/:id */
+  app.delete('/api/release-notes/:id', (req: any, res: any) => {
+    const workspaceId = getWorkspaceId(req);
+    const rdAllowed = assertCurrentUserIsReleaseNoteRd(req, workspaceId);
+    if (rdAllowed !== true) return res.status(rdAllowed.status).json({ success: false, message: rdAllowed.message });
+    const record = findById(req.params.id);
+    if (!record || !recordInWorkspace(record, workspaceId)) {
+      return res.status(404).json({ success: false, message: '记录不存在' });
+    }
+    if (!remove(req.params.id)) {
+      return res.status(404).json({ success: false, message: '记录不存在' });
+    }
+    res.json({ success: true, message: '删除成功' });
+  });
+
 }

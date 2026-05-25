@@ -1,7 +1,7 @@
 export type Language = 'zh-CN' | 'en-US';
 
 const EN_REPLACEMENTS: Record<string, string> = {
-  'TV AI Voice 测试全流程体系': 'TV AI Voice End-to-End Test System',
+  '项目交付管理平台': 'Project Delivery Management Platform',
   '配置应用和管理数据': 'Configure the app and manage data',
   'Azure OpenAI 配置': 'Azure OpenAI Settings',
   'API 端点': 'API Endpoint',

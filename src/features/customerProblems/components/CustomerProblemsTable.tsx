@@ -6,6 +6,7 @@ import { Button } from '../../../components/common/Button';
 import { Tag } from '../../../components/common/Tag';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { useI18n } from '../../../i18n/I18nProvider';
+import { usePermission } from '../../../auth/usePermission';
 
 const ZMIND_BASE_URL = 'https://zmind.whaletv.com/issues/';
 const PT_LABEL: Record<string, string> = { TV: 'TV', Projector: 'Projector', STB: 'STB' };
@@ -18,6 +19,7 @@ interface CustomerProblemsTableProps {
   onEdit: (problem: CustomerProblem) => void;
   onDelete: (id: string) => void;
   onPaginationChange: (page: number, pageSize: number) => void;
+  onBatchStatusChange?: (ids: string[], status: string) => void;
   qaItems?: CustomerProblem[];
   onViewTimeline?: (problem: CustomerProblem) => void;
 }
@@ -37,13 +39,39 @@ const getStatusColor = (s: string) => {
 };
 
 const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
-  problems, loading, pagination, onEdit, onDelete, onPaginationChange, qaItems, onViewTimeline,
+  problems, loading, pagination, onEdit, onDelete, onPaginationChange, onBatchStatusChange, qaItems, onViewTimeline,
 }) => {
   const { formatDateTime } = useI18n();
+  const permission = usePermission();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
   const showProjectCol = currentProject === '全部';
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === problems.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(problems.map((p) => p.id!)));
+    }
+  };
+
+  const handleBatchStatus = (status: string) => {
+    if (selectedIds.size === 0) return;
+    if (onBatchStatusChange) {
+      onBatchStatusChange(Array.from(selectedIds), status);
+      setSelectedIds(new Set());
+    }
+  };
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -83,10 +111,25 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* 批量操作栏 */}
+      {selectedIds.size > 0 && permission.canEditProblems && onBatchStatusChange && (
+        <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 flex items-center gap-3">
+          <span className="text-sm text-blue-700 font-medium">已选 {selectedIds.size} 项</span>
+          <button onClick={() => handleBatchStatus('进行中')} className="px-2.5 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full hover:bg-yellow-200 transition">标记进行中</button>
+          <button onClick={() => handleBatchStatus('已解决')} className="px-2.5 py-1 text-xs bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition">标记已解决</button>
+          <button onClick={() => handleBatchStatus('开放')} className="px-2.5 py-1 text-xs bg-red-100 text-red-700 rounded-full hover:bg-red-200 transition">标记开放</button>
+          <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-gray-500 hover:text-gray-700">取消选择</button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full table-fixed">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
+              {permission.canEditProblems && onBatchStatusChange && (
+                <th className="px-2 py-3 w-8">
+                  <input type="checkbox" checked={selectedIds.size === problems.length && problems.length > 0} onChange={toggleSelectAll} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                </th>
+              )}
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900 w-8"></th>
               {showProjectCol && <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">项目</th>}
               <th className="px-3 py-3 text-left text-sm font-semibold text-gray-900">PR号</th>
@@ -104,6 +147,11 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
               return (
                 <React.Fragment key={p.id}>
                   <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleExpand(p.id!)}>
+                    {permission.canEditProblems && onBatchStatusChange && (
+                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(p.id!)} onChange={() => toggleSelect(p.id!)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                      </td>
+                    )}
                     <td className="px-3 py-3 text-sm text-gray-500">
                       <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                     </td>
@@ -142,14 +190,14 @@ const CustomerProblemsTable: React.FC<CustomerProblemsTableProps> = ({
                         {isCustomer && p.linkedQaProblems && p.linkedQaProblems.length > 0 && onViewTimeline && (
                           <Button onClick={() => onViewTimeline(p)} variant="secondary" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''}>时间轴</Button>
                         )}
-                        <Button onClick={() => onEdit(p)} variant="secondary" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''}>编辑</Button>
-                        <Button onClick={() => onDelete(p.id!)} variant="danger" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''}>删除</Button>
+                        <Button onClick={() => onEdit(p)} variant="secondary" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''} disabled={!permission.canEditProblems}>编辑</Button>
+                        <Button onClick={() => onDelete(p.id!)} variant="danger" size="sm" className={showProjectCol ? '!px-2 !py-1 !text-xs whitespace-nowrap' : ''} disabled={!permission.canEditProblems}>删除</Button>
                       </div>
                     </td>
                   </tr>
                   {isExpanded && (
                     <tr className="bg-blue-100/30">
-                      <td colSpan={showProjectCol ? 9 : 8} className="px-6 py-4">
+                      <td colSpan={showProjectCol ? 10 : 9} className="px-6 py-4">
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm overflow-hidden">
                           <div className="col-span-2 min-w-0">
                             <span className="text-gray-500">问题描述：</span>

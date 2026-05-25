@@ -36,6 +36,7 @@ const RecommendationsPage: React.FC = () => {
   const { formatDate } = useI18n();
   const { testCases, stats, categories, currentRecommendation, loading, importLoading, recommendLoading, error } = useSelector((s: RootState) => s.recommendations);
   const currentProject = useSelector((s: RootState) => s.project.currentProject);
+  const currentWorkspace = useSelector((s: RootState) => s.project.currentWorkspace);
   const currentPT = currentProject === '全部' ? undefined : PROJECT_MAP[currentProject];
 
   const [tab, setTab] = useState<Tab>('knowledge');
@@ -58,14 +59,14 @@ const RecommendationsPage: React.FC = () => {
   useEffect(() => {
     dispatch(fetchKBStats());
     dispatch(fetchCategories());
-  }, [dispatch]);
+  }, [dispatch, currentWorkspace]);
 
   // 项目切换时重新加载用例和版本
   useEffect(() => {
     const pt = filterProject || currentPT;
     dispatch(fetchTestCases({ keyword: searchKeyword, category: filterCategory, projectType: pt }));
     loadReleaseVersions();
-  }, [currentProject, filterProject]);
+  }, [currentProject, currentWorkspace, filterProject]);
 
   const loadReleaseVersions = async () => {
     try {

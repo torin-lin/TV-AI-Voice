@@ -1,87 +1,56 @@
-# 需求分析问卷
+# Zmind 提交入口统一 - 需求确认问题
 
-请回答以下问题以帮助我更好地理解您的需求。
+请回答以下问题以确认需求细节。
 
-## 问题 1
-关于 AI 用例推荐功能，您希望 AI 如何判断需要执行哪些用例？
+## Question 1
+附件上传到 zmind 的方式：目前 VersionIssueList 的附件是先上传到本地服务器，但并未通过 Redmine API 上传到 zmind。你希望问题追踪的附件上传如何处理？
 
-A) 基于版本修改内容自动分析（例如：修改了蓝牙模块，则推荐蓝牙相关用例）
-B) 基于风险等级推荐（低/中/高风险对应不同的用例集合）
-C) 基于历史问题数据推荐（根据客户问题追踪表中的常见问题）
-D) 上述所有方式的组合
-E) 其他（请在 [Answer]: 标签后描述）
-
-[Answer]: D
-
-## 问题 2
-关于数据存储，您希望如何保存测试记录和客户问题数据？
-
-A) 浏览器本地存储（LocalStorage，数据仅在本地保存）
-B) 云端数据库（需要后端服务器）
-C) 导出为 CSV/Excel 文件（用户手动管理）
-D) 其他（请在 [Answer]: 标签后描述）
-
-[Answer]: 通过本地数据库保存
-
-## 问题 3
-关于 Web 网页的主要用户，他们是谁？
-
-A) 测试工程师（需要详细的测试记录和数据分析）
-B) 产品经理（需要版本风险评估和发布结论）
-C) 客户支持团队（需要客户问题追踪和解决方案）
-D) 上述所有角色
-E) 其他（请在 [Answer]: 标签后描述）
-
-[Answer]: A
-
-## 问题 4
-关于现代化风格和颜色渐变，您有具体的偏好吗？
-
-A) 蓝色系渐变（专业、科技感）
-B) 紫色系渐变（现代、创意感）
-C) 绿色系渐变（清爽、健康感）
-D) 多色渐变（彩虹、活力感）
-E) 其他（请在 [Answer]: 标签后描述）
-
-[Answer]: A
-
-## 问题 5
-关于 Azure OpenAI API 的集成，您是否需要以下功能？
-
-A) 仅用于推荐用例（基于版本信息生成推荐）
-B) 用于推荐用例 + 问题分析（分析客户问题并分类）
-C) 用于推荐用例 + 问题分析 + 生成测试报告
-D) 其他（请在 [Answer]: 标签后描述）
+A) 与 VersionIssueList 一致：附件只存本地服务器，zmind issue 描述中附带附件链接
+B) 真正上传到 zmind：通过 Redmine uploads API 将附件上传到 zmind 服务器，issue 创建时关联附件
+C) 两者都支持：本地存一份，同时上传到 zmind
+D) Other (please describe after [Answer]: tag below)
 
 [Answer]: B
 
-## 问题 6
-关于网页的响应式设计，您需要支持哪些设备？
+## Question 2
+自定义字段"显示全部"的含义：目前 VersionIssueList 按 tracker 过滤自定义字段（只显示与选中 tracker 关联的字段）。你说"显示全部字段（不只是 required）"，具体是指？
 
-A) 仅桌面浏览器（1920x1080 及以上）
-B) 桌面 + 平板（支持响应式设计）
-C) 桌面 + 平板 + 手机（完全响应式）
-D) 其他（请在 [Answer]: 标签后描述）
-
-[Answer]: A
-
-## 问题 7
-关于版本测试记录表的功能，您需要哪些操作？
-
-A) 仅查看和搜索
-B) 查看、搜索、添加新记录
-C) 查看、搜索、添加、编辑、删除
-D) 上述所有 + 导出功能
-E) 其他（请在 [Answer]: 标签后描述）
-
-[Answer]: D
-
-## 问题 8
-关于客户问题追踪，您希望系统自动执行哪些操作？
-
-A) 仅记录问题信息
-B) 记录 + 自动分类（使用 AI）
-C) 记录 + 自动分类 + 推荐解决方案
-D) 其他（请在 [Answer]: 标签后描述）
+A) 保持按 tracker 过滤，但显示该 tracker 下的所有字段（包括非必填）
+B) 不按 tracker 过滤，显示项目下所有自定义字段（包括非必填）
+C) Other (please describe after [Answer]: tag below)
 
 [Answer]: B
+
+## Question 3
+描述模板统一：目前两个入口的模板略有不同。VersionIssueList 的模板包含"问题描述/复现步骤/实际结果/期望结果/复现概率/备注"，CustomerProblemForm 的模板多了"测试环境"部分。统一后使用哪个？
+
+A) 使用 VersionIssueList 的模板（不含测试环境，因为有独立的测试环境字段）
+B) 使用 CustomerProblemForm 的模板（含测试环境信息）
+C) 合并两者：包含所有字段（问题描述/复现步骤/实际结果/期望结果/复现概率/测试环境/备注）
+D) Other (please describe after [Answer]: tag below)
+
+[Answer]: 按照以下模板
+"
+【Tested Environment】
+
+【Initial Situation】
+
+【Operation Steps】
+
+  [Step1]
+
+  [Step2]
+
+  [Step3]
+
+  [Step4]
+
+【 Actual Result 】
+
+【Expect Result】
+
+【Frequency Details】
+ 
+【Recovery Method】
+
+"

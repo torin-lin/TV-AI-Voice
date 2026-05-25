@@ -5,6 +5,7 @@
 
 import { CustomerProblem } from '../types/database';
 import { appendWorkspaceParam, withWorkspaceBody } from './WorkspaceContext';
+import { authFetch } from './authFetch';
 
 function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
@@ -12,7 +13,7 @@ function getBaseUrl(): string {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await authFetch(`${baseUrl}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -32,6 +33,7 @@ export interface ProblemQueryParams {
   status?: string;
   projectGroup?: string;
   keyword?: string;
+  firmwareVersion?: string;
   startDate?: number;
   endDate?: number;
 }
@@ -53,6 +55,7 @@ export async function apiQueryProblems(params: ProblemQueryParams = {}): Promise
   if (params.status) qs.set('status', params.status);
   if (params.projectGroup) qs.set('projectGroup', params.projectGroup);
   if (params.keyword) qs.set('keyword', params.keyword);
+  if (params.firmwareVersion) qs.set('firmwareVersion', params.firmwareVersion);
   if (params.startDate) qs.set('startDate', String(params.startDate));
   if (params.endDate) qs.set('endDate', String(params.endDate));
   appendWorkspaceParam(qs);

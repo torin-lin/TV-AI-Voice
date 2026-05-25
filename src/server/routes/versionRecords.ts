@@ -12,7 +12,7 @@ import {
 } from '../storage/versionRecordStorage';
 import { VersionStatus } from '../../types/database';
 import { findById as findReleaseNoteById } from '../storage/releaseNoteStorage';
-import { DEFAULT_WORKSPACE_ID, getWorkspaceId, recordInProjectGroup, recordInWorkspace } from '../workspace';
+import { getWorkspaceId, recordInProjectGroup, recordInWorkspace } from '../workspace';
 
 const VERSION_STATUS_FLOW: Record<VersionStatus, VersionStatus[]> = {
   '待测试': ['待测试', '测试中', '阻塞'],
@@ -110,6 +110,9 @@ export function setupVersionRecordRoutes(app: any): void {
     try {
       const record = findById(req.params.id);
       if (!record) return res.status(404).json({ success: false, message: '未找到' });
+      if (!recordInWorkspace(record, getWorkspaceId(req))) {
+        return res.status(404).json({ success: false, message: '未找到' });
+      }
       res.json({ success: true, data: record });
     } catch (error) {
       res.status(500).json({ success: false, message: (error as Error).message });
@@ -130,6 +133,10 @@ export function setupVersionRecordRoutes(app: any): void {
       if (!releaseNote) {
         return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
       }
+      const workspaceId = getWorkspaceId(req);
+      if (!recordInWorkspace(releaseNote, workspaceId)) {
+        return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
+      }
       if (!canCreateQaRecordFromReleaseNote(releaseNote)) {
         return res.status(400).json({ success: false, message: '只有 RD 冒烟通过或紧急版本才能创建 QA 版本记录' });
       }
@@ -141,7 +148,7 @@ export function setupVersionRecordRoutes(app: any): void {
       }
       const payload = {
         ...req.body,
-        workspaceId: req.body.workspaceId || releaseNote.workspaceId || DEFAULT_WORKSPACE_ID,
+        workspaceId,
         versionNumber: releaseNote.version,
         parentVersion: releaseNote.parentVersion || '',
         projectType: releaseNote.projectType || req.body.projectType,
@@ -158,10 +165,17 @@ export function setupVersionRecordRoutes(app: any): void {
     try {
       const current = findById(req.params.id);
       if (!current) return res.status(404).json({ success: false, message: '未找到' });
+      const workspaceId = getWorkspaceId(req);
+      if (!recordInWorkspace(current, workspaceId)) {
+        return res.status(404).json({ success: false, message: '未找到' });
+      }
 
       if (req.body.releaseNoteId) {
         const releaseNote = findReleaseNoteById(req.body.releaseNoteId);
         if (!releaseNote) {
+          return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
+        }
+        if (!recordInWorkspace(releaseNote, workspaceId)) {
           return res.status(400).json({ success: false, message: '关联的 RD 版本不存在' });
         }
         if (!canCreateQaRecordFromReleaseNote(releaseNote)) {
@@ -193,7 +207,9 @@ export function setupVersionRecordRoutes(app: any): void {
         }
       }
 
-      const ok = update(req.params.id, req.body);
+      const data = { ...req.body };
+      delete data.workspaceId;
+      const ok = update(req.params.id, data);
       if (!ok) return res.status(404).json({ success: false, message: '未找到' });
       res.json({ success: true });
     } catch (error) {
@@ -204,6 +220,10 @@ export function setupVersionRecordRoutes(app: any): void {
   /** DELETE /api/version-records/:id */
   app.delete('/api/version-records/:id', (req: any, res: any) => {
     try {
+      const current = findById(req.params.id);
+      if (!current || !recordInWorkspace(current, getWorkspaceId(req))) {
+        return res.status(404).json({ success: false, message: '未找到' });
+      }
       const ok = remove(req.params.id);
       if (!ok) return res.status(404).json({ success: false, message: '未找到' });
       res.json({ success: true });

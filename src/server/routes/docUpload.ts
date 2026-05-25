@@ -6,6 +6,8 @@
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { getDb } from '../storage/sqlite';
+import { getWorkspaceId } from '../workspace';
 
 const DOC_STORAGE_DIR = process.env.DOC_STORAGE_DIR || path.join(process.cwd(), 'uploads', 'docs');
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -26,6 +28,27 @@ function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function docBelongsToWorkspace(fileName: string, req: any): boolean {
+  const safeName = path.basename(fileName);
+  const filePath = `/api/docs/download/${safeName}`;
+  const workspaceId = getWorkspaceId(req);
+  const versionRecord = getDb().prepare(
+    `SELECT id FROM version_records
+     WHERE workspaceId = ?
+       AND (prototypeFilePath = ? OR testResultFilePath = ? OR prototypeFileName = ? OR testResultFileName = ?)
+     LIMIT 1`
+  ).get(workspaceId, filePath, filePath, safeName, safeName);
+  if (versionRecord) return true;
+
+  const releaseNote = getDb().prepare(
+    `SELECT id FROM release_notes
+     WHERE workspaceId = ?
+       AND (testReportFilePath = ? OR testReportFileName = ?)
+     LIMIT 1`
+  ).get(workspaceId, filePath, safeName);
+  return Boolean(releaseNote);
 }
 
 export function setupDocUploadRoutes(app: any): void {
@@ -73,6 +96,9 @@ export function setupDocUploadRoutes(app: any): void {
   /** GET /api/docs/download/:fileName */
   app.get('/api/docs/download/:fileName', (req: any, res: any) => {
     const safe = path.basename(req.params.fileName);
+    if (!docBelongsToWorkspace(safe, req)) {
+      return res.status(404).json({ success: false, message: '文件不存在' });
+    }
     const fp = path.join(DOC_STORAGE_DIR, safe);
     if (!fs.existsSync(fp)) return res.status(404).json({ success: false, message: '文件不存在' });
 

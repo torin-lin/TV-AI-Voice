@@ -68,8 +68,10 @@ function getBaseUrl(): string {
   return `${window.location.protocol}//${window.location.host}`;
 }
 
+import { authFetch } from './authFetch';
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${getBaseUrl()}${path}`, {
+  const res = await authFetch(`${getBaseUrl()}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });

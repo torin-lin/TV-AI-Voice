@@ -21,5 +21,21 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    chunkSizeWarningLimit: 1100,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('exceljs')) return 'vendor-exceljs';
+          return undefined;
+        },
+      },
+    },
+    commonjsOptions: {
+      include: [/xlsx/, /node_modules/],
+    },
+  },
+  optimizeDeps: {
+    include: ['xlsx'],
   },
 });

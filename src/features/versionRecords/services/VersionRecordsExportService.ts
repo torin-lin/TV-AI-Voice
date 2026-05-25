@@ -3,9 +3,9 @@
  * 提供导出为 Excel 和 CSV 的功能
  */
 
-import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { VersionRecord } from '../../../types/database';
+import { exportRowsToExcel } from '../../../services/ExcelWorkbookService';
 
 // 获取项目类型的显示名称
 const getProjectTypeLabel = (type?: string): string => {
@@ -24,7 +24,7 @@ const getProjectTypeLabel = (type?: string): string => {
 /**
  * 导出为 Excel 文件
  */
-export const exportToExcel = (records: VersionRecord[], filename: string) => {
+export const exportToExcel = async (records: VersionRecord[], filename: string) => {
   try {
     // 准备数据
     const data = records.map((record) => ({
@@ -48,36 +48,7 @@ export const exportToExcel = (records: VersionRecord[], filename: string) => {
       更新时间: new Date(record.updatedAt).toLocaleString('zh-CN'),
     }));
 
-    // 创建工作簿
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'QA版本记录');
-
-    // 设置列宽
-    const columnWidths = [
-      { wch: 14 }, // 关联RD版本
-      { wch: 12 }, // 版本号
-      { wch: 18 }, // 固件版本号
-      { wch: 15 }, // 关联PR/CR
-      { wch: 20 }, // 修改内容
-      { wch: 10 }, // 项目类型
-      { wch: 20 }, // 修改模块
-      { wch: 10 }, // 风险等级
-      { wch: 14 }, // 语音功能回归
-      { wch: 16 }, // 系统集成回归
-      { wch: 20 }, // 测试周期
-      { wch: 25 }, // 原型来源
-      { wch: 24 }, // 测试结果Excel
-      { wch: 28 }, // 提前介入原因
-      { wch: 14 }, // 介入责任人
-      { wch: 20 }, // 备注
-      { wch: 18 }, // 创建时间
-      { wch: 18 }, // 更新时间
-    ];
-    worksheet['!cols'] = columnWidths;
-
-    // 导出文件
-    XLSX.writeFile(workbook, filename);
+    await exportRowsToExcel(data, filename, 'QA版本记录', [14, 12, 18, 15, 20, 10, 20, 10, 14, 16, 20, 25, 24, 28, 14, 20, 18, 18]);
   } catch (error) {
     console.error('导出 Excel 失败:', error);
     throw new Error('导出 Excel 失败');

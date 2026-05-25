@@ -79,6 +79,14 @@ export const AI_VOICE_EXTENSION_MODULES: ProjectModuleDefinition[] = [
     scope: 'extension',
     description: 'AI Voice Planner、别名匹配、影片搜索和多语言技能分发验证。',
   },
+  {
+    id: 'mitm-proxy',
+    path: '/mitm-proxy',
+    label: '抓包代理',
+    icon: '🔒',
+    scope: 'extension',
+    description: 'MITM HTTPS 代理，抓取 TV 设备请求并支持按规则修改响应内容。',
+  },
 ];
 
 export const PLATFORM_MODULES: ProjectModuleDefinition[] = [

@@ -13,6 +13,7 @@ import { ReleaseNote } from '../../../types/database';
 import ReleaseNotesTable from './ReleaseNotesTable';
 import ReleaseNoteFilters from './ReleaseNoteFilters';
 import ReleaseNoteModal from './ReleaseNoteModal';
+import { usePermission } from '../../../auth/usePermission';
 import { Button } from '../../../components/common/Button';
 import { exportToExcel, exportToCSV } from '../services/ReleaseNotesExportService';
 import { useI18n } from '../../../i18n/I18nProvider';
@@ -27,6 +28,7 @@ const ReleaseNotesPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
+  const permission = usePermission();
   const {
     items,
     loading,
@@ -36,10 +38,12 @@ const ReleaseNotesPage: React.FC = () => {
     sorting,
   } = useSelector((state: RootState) => state.releaseNotes);
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ReleaseNote | null>(null);
   const [defaultParentVersion, setDefaultParentVersion] = useState('');
+  const [childProjectType, setChildProjectType] = useState('');
   const [qaRecords, setQaRecords] = useState<VersionRecord[]>([]);
   const keywordFromUrl = searchParams.get('keyword') || undefined;
 
@@ -52,16 +56,19 @@ const ReleaseNotesPage: React.FC = () => {
   }, [dispatch, filters, keywordFromUrl, pagination.pageSize]);
 
   useEffect(() => {
+    const queryPagination = { page: pagination.page, pageSize: pagination.pageSize };
     dispatch(
       fetchReleaseNotes({
         filters: { ...filters, projectGroup: currentProject },
-        pagination,
+        pagination: queryPagination,
+        workspaceId: currentWorkspace,
       })
     );
-  }, [dispatch, filters, pagination, currentProject]);
+  }, [dispatch, filters, pagination.page, pagination.pageSize, currentProject, currentWorkspace]);
 
   useEffect(() => {
     const loadQaRecords = async () => {
+      setQaRecords([]);
       try {
         const response = await apiQueryVersionRecords(
           currentProject && currentProject !== '全部' ? { projectGroup: currentProject } : {},
@@ -74,7 +81,7 @@ const ReleaseNotesPage: React.FC = () => {
     };
 
     void loadQaRecords();
-  }, [currentProject]);
+  }, [currentProject, currentWorkspace]);
 
   // 处理添加新记录
   const handleAddRecord = () => {
@@ -84,9 +91,10 @@ const ReleaseNotesPage: React.FC = () => {
   };
 
   // 处理添加子版本
-  const handleAddChild = (parentVersion: string, _projectType?: string) => {
+  const handleAddChild = (parentVersion: string, projectType?: string) => {
     setEditingRecord(null);
     setDefaultParentVersion(parentVersion);
+    setChildProjectType(projectType || '');
     setIsModalOpen(true);
   };
 
@@ -134,8 +142,8 @@ const ReleaseNotesPage: React.FC = () => {
       <div className="w-full mx-auto">
         {/* 页面标题 */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Release Note (RD)</h1>
-          <p className="text-gray-600 mt-2">研发代码修改记录管理</p>
+          <h1 className="text-3xl font-bold text-gray-900">Release Note</h1>
+          <p className="text-gray-600 mt-2">版本变更与交付记录管理</p>
         </div>
 
         {/* 工具栏 */}
@@ -144,6 +152,8 @@ const ReleaseNotesPage: React.FC = () => {
             onClick={handleAddRecord}
             variant="primary"
             className="flex items-center gap-2"
+            disabled={!permission.canEditReleaseNotes}
+            title={!permission.canEditReleaseNotes ? '无权限，请登录或联系管理员' : undefined}
           >
             <span>+</span> 添加新记录
           </Button>
@@ -195,7 +205,8 @@ const ReleaseNotesPage: React.FC = () => {
           <ReleaseNoteModal
             record={editingRecord}
             defaultParentVersion={defaultParentVersion}
-            onClose={() => { setIsModalOpen(false); setDefaultParentVersion(''); }}
+            defaultProjectType={childProjectType || undefined}
+            onClose={() => { setIsModalOpen(false); setDefaultParentVersion(''); setChildProjectType(''); }}
           />
         )}
       </div>

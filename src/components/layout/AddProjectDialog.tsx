@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../common/Button';
 import { AI_VOICE_EXTENSION_MODULES, COMMON_PROJECT_MODULES } from '../../config/projectModules';
-import { addCustomProject, ProjectWorkspace } from '../../config/projectRegistry';
+import { createCustomProject, ProjectWorkspace } from '../../config/projectRegistry';
 
 interface AddProjectDialogProps {
   onClose: () => void;
@@ -12,6 +12,7 @@ const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ onClose, onCreated 
   const [name, setName] = useState('');
   const [selectedExtensions, setSelectedExtensions] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const toggleExtension = (id: string) => {
     setSelectedExtensions((prev) => (
@@ -19,12 +20,15 @@ const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ onClose, onCreated 
     ));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     try {
-      const project = addCustomProject(name, selectedExtensions);
+      setSubmitting(true);
+      const project = await createCustomProject(name, selectedExtensions);
       onCreated(project);
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建项目失败');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -81,7 +85,7 @@ const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ onClose, onCreated 
         </div>
         <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
           <Button variant="secondary" size="sm" onClick={onClose}>取消</Button>
-          <Button variant="primary" size="sm" onClick={handleCreate}>创建并切换</Button>
+          <Button variant="primary" size="sm" onClick={handleCreate} disabled={submitting}>{submitting ? '创建中...' : '创建并切换'}</Button>
         </div>
       </div>
     </div>

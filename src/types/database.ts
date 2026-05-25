@@ -36,6 +36,12 @@ export interface ReleaseNote {
   apkFileSize?: number;
   /** APK 文件在服务端的存储路径 */
   apkFilePath?: string;
+  /** 自测/验证报告文件名 */
+  testReportFileName?: string;
+  /** 自测/验证报告文件大小（字节） */
+  testReportFileSize?: number;
+  /** 自测/验证报告服务端路径 */
+  testReportFilePath?: string;
   createdAt: number;
   updatedAt: number;
 }

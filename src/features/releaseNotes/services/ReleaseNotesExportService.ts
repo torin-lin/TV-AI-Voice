@@ -1,6 +1,6 @@
 import { ReleaseNote } from '../../../types/database';
-import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import { exportRowsToExcel } from '../../../services/ExcelWorkbookService';
 
 /**
  * Release Note 导出服务
@@ -26,10 +26,15 @@ const getProjectTypeLabel = (type?: string): string => {
   }
 };
 
+const getImpactScope = (record: ReleaseNote): string => [
+  ...(record.affectedModules || []),
+  ...(record.affectedFeatures || []),
+].filter((tag, index, arr) => tag && arr.indexOf(tag) === index).join('; ');
+
 /**
  * 导出为 Excel 文件
  */
-export const exportToExcel = (records: ReleaseNote[], filename: string) => {
+export const exportToExcel = async (records: ReleaseNote[], filename: string) => {
   try {
     // 准备数据
     const data = records.map((record) => ({
@@ -44,43 +49,15 @@ export const exportToExcel = (records: ReleaseNote[], filename: string) => {
       破坏性变更: record.breakingChanges ? '是' : '否',
       迁移类型: record.migrationType || '无',
       修改内容: record.changeDescription,
-      受影响的模块: record.affectedModules?.join('; ') || '',
-      受影响的功能: record.affectedFeatures?.join('; ') || '',
+      影响范围: getImpactScope(record),
       测试备注: record.testingNotes || '',
+      自测报告: record.testReportFileName || '',
       APK文件: record.apkFileName || '',
       创建时间: new Date(record.createdAt).toLocaleString('zh-CN'),
       更新时间: new Date(record.updatedAt).toLocaleString('zh-CN'),
     }));
 
-    // 创建工作簿
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Release Notes');
-
-    // 设置列宽
-    const columnWidths = [
-      { wch: 12 }, // 版本号
-      { wch: 15 }, // 分支
-      { wch: 12 }, // 作者
-      { wch: 15 }, // 项目类型
-      { wch: 10 }, // 修改类型
-      { wch: 10 }, // 严重程度
-      { wch: 12 }, // RD冒烟测试
-      { wch: 10 }, // 回归风险
-      { wch: 10 }, // 破坏性变更
-      { wch: 12 }, // 迁移类型
-      { wch: 25 }, // 修改内容
-      { wch: 20 }, // 受影响的模块
-      { wch: 20 }, // 受影响的功能
-      { wch: 25 }, // 测试备注
-      { wch: 20 }, // APK文件
-      { wch: 18 }, // 创建时间
-      { wch: 18 }, // 更新时间
-    ];
-    worksheet['!cols'] = columnWidths;
-
-    // 导出文件
-    XLSX.writeFile(workbook, filename);
+    await exportRowsToExcel(data, filename, 'Release Notes', [12, 15, 12, 15, 10, 10, 12, 10, 10, 12, 25, 24, 25, 20, 20, 18, 18]);
   } catch (error) {
     console.error('导出 Excel 失败:', error);
     throw new Error('导出 Excel 失败');
@@ -105,9 +82,9 @@ export const exportToCSV = (records: ReleaseNote[], filename: string) => {
       破坏性变更: record.breakingChanges ? '是' : '否',
       迁移类型: record.migrationType || '无',
       修改内容: record.changeDescription,
-      受影响的模块: record.affectedModules?.join('; ') || '',
-      受影响的功能: record.affectedFeatures?.join('; ') || '',
+      影响范围: getImpactScope(record),
       测试备注: record.testingNotes || '',
+      自测报告: record.testReportFileName || '',
       APK文件: record.apkFileName || '',
       创建时间: new Date(record.createdAt).toLocaleString('zh-CN'),
       更新时间: new Date(record.updatedAt).toLocaleString('zh-CN'),

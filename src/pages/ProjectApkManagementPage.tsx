@@ -46,6 +46,7 @@ const getSmokeClass = (status?: string) => {
 const ProjectApkManagementPage: React.FC = () => {
   const { formatDateTime } = useI18n();
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -74,7 +75,7 @@ const ProjectApkManagementPage: React.FC = () => {
     };
 
     void load();
-  }, [currentProject]);
+  }, [currentProject, currentWorkspace]);
 
   const handleBrandChange = (recordKey: string, brandKey: string) => {
     setSelectedBrands((prev) => ({

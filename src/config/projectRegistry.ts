@@ -1,5 +1,6 @@
 import { AI_VOICE_EXTENSION_MODULES, ProjectModuleDefinition } from './projectModules';
 import { PROJECT_OPTIONS } from './dictionaries';
+import { authFetch } from '../services/authFetch';
 
 export interface ProjectGroup {
   id: string;
@@ -17,6 +18,7 @@ export interface ProjectWorkspace {
 }
 
 const CUSTOM_PROJECTS_STORAGE_KEY = 'custom_project_workspaces';
+const MIGRATED_PROJECTS_STORAGE_KEY = 'custom_project_workspaces_migrated_to_db';
 export const PROJECT_REGISTRY_EVENT = 'project-workspace-registry-change';
 const ALL_EXTENSION_IDS = AI_VOICE_EXTENSION_MODULES.map((module) => module.id);
 const DEFAULT_PROJECT_GROUPS: ProjectGroup[] = PROJECT_OPTIONS.map((option) => ({
@@ -35,6 +37,8 @@ export const BUILTIN_PROJECT_WORKSPACES: ProjectWorkspace[] = [
     builtin: true,
   },
 ];
+
+let workspaceCache: ProjectWorkspace[] = [];
 
 function readCustomProjects(): ProjectWorkspace[] {
   if (typeof window === 'undefined') return [];
@@ -80,9 +84,9 @@ function normalizeProjectGroups(groups: unknown): ProjectGroup[] {
     });
 }
 
-function fallbackProjectGroups(id: string, name: string): ProjectGroup[] {
+function fallbackProjectGroups(id: string, _name: string): ProjectGroup[] {
   if (id === 'AI Voice') return DEFAULT_PROJECT_GROUPS;
-  return [{ id: name, name, projectType: name }];
+  return []; // 非内置项目默认无项目组
 }
 
 function writeCustomProjects(projects: ProjectWorkspace[]): void {
@@ -92,11 +96,50 @@ function writeCustomProjects(projects: ProjectWorkspace[]): void {
 }
 
 export function getProjectWorkspaces(): ProjectWorkspace[] {
+  if (workspaceCache.length > 0) return workspaceCache;
   const customProjects = readCustomProjects();
   const customById = new Map(customProjects.map((project) => [project.id, project]));
   const builtinProjects = BUILTIN_PROJECT_WORKSPACES.map((project) => customById.get(project.id) || project);
   const builtinIds = new Set(BUILTIN_PROJECT_WORKSPACES.map((project) => project.id));
   return [...builtinProjects, ...customProjects.filter((project) => !builtinIds.has(project.id))];
+}
+
+function setWorkspaceCache(projects: ProjectWorkspace[]): void {
+  workspaceCache = projects.length > 0 ? projects : BUILTIN_PROJECT_WORKSPACES;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(PROJECT_REGISTRY_EVENT));
+  }
+}
+
+async function readApiJson<T>(res: Response): Promise<T> {
+  const json = await res.json();
+  if (!json.success) throw new Error(json.message || '项目配置请求失败');
+  return json.data;
+}
+
+export async function loadProjectWorkspaces(): Promise<ProjectWorkspace[]> {
+  const res = await authFetch('/api/project-workspaces');
+  const projects = await readApiJson<ProjectWorkspace[]>(res);
+  setWorkspaceCache(projects);
+  return projects;
+}
+
+export async function migrateLocalProjectWorkspaces(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem(MIGRATED_PROJECTS_STORAGE_KEY) === '1') return;
+  const projects = readCustomProjects();
+  if (projects.length === 0) {
+    localStorage.setItem(MIGRATED_PROJECTS_STORAGE_KEY, '1');
+    return;
+  }
+  const res = await authFetch('/api/project-workspaces/import-local', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projects }),
+  });
+  const nextProjects = await readApiJson<ProjectWorkspace[]>(res);
+  setWorkspaceCache(nextProjects);
+  localStorage.setItem(MIGRATED_PROJECTS_STORAGE_KEY, '1');
 }
 
 export function addCustomProject(name: string, extensionModuleIds: string[]): ProjectWorkspace {
@@ -110,9 +153,20 @@ export function addCustomProject(name: string, extensionModuleIds: string[]): Pr
     id: trimmedName,
     name: trimmedName,
     extensionModuleIds: extensionModuleIds.filter((id) => allowedIds.has(id)),
-    projectGroups: [{ id: trimmedName, name: trimmedName, projectType: trimmedName }],
+    projectGroups: [], // 新项目默认无项目组，只有"全部"
   };
   writeCustomProjects([...readCustomProjects(), project]);
+  return project;
+}
+
+export async function createCustomProject(name: string, extensionModuleIds: string[]): Promise<ProjectWorkspace> {
+  const res = await authFetch('/api/project-workspaces', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, extensionModuleIds }),
+  });
+  const project = await readApiJson<ProjectWorkspace>(res);
+  await loadProjectWorkspaces();
   return project;
 }
 
@@ -134,6 +188,31 @@ export function updateProjectModules(projectId: string, extensionModuleIds: stri
   const updated = { ...existing, extensionModuleIds: nextIds };
   writeCustomProjects(projects.map((project) => (project.id === projectId ? updated : project)));
   return updated;
+}
+
+export async function saveProjectModules(projectId: string, extensionModuleIds: string[]): Promise<ProjectWorkspace> {
+  const res = await authFetch(`/api/project-workspaces/${encodeURIComponent(projectId)}/modules`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ extensionModuleIds }),
+  });
+  const project = await readApiJson<ProjectWorkspace>(res);
+  await loadProjectWorkspaces();
+  return project;
+}
+
+export function deleteCustomProject(projectId: string): void {
+  if (BUILTIN_PROJECT_WORKSPACES.some((p) => p.id === projectId)) {
+    throw new Error('内置项目不能删除');
+  }
+  const projects = readCustomProjects().filter((p) => p.id !== projectId);
+  writeCustomProjects(projects);
+}
+
+export async function removeCustomProject(projectId: string): Promise<void> {
+  const res = await authFetch(`/api/project-workspaces/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+  await readApiJson<void>(res);
+  await loadProjectWorkspaces();
 }
 
 export function addProjectGroup(workspaceId: string, name: string): ProjectWorkspace {
@@ -158,6 +237,42 @@ export function addProjectGroup(workspaceId: string, name: string): ProjectWorks
   };
   writeCustomProjects([...customProjects, updated]);
   return updated;
+}
+
+export async function createProjectGroup(workspaceId: string, name: string): Promise<ProjectWorkspace> {
+  const res = await authFetch(`/api/project-workspaces/${encodeURIComponent(workspaceId)}/groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const workspace = await readApiJson<ProjectWorkspace>(res);
+  await loadProjectWorkspaces();
+  return workspace;
+}
+
+export function deleteProjectGroup(workspaceId: string, groupId: string): ProjectWorkspace {
+  const workspaces = getProjectWorkspaces();
+  const workspace = workspaces.find((project) => project.id === workspaceId);
+  if (!workspace) throw new Error('独立项目不存在');
+
+  const group = workspace.projectGroups.find((g) => g.id === groupId);
+  if (!group) throw new Error('项目组不存在');
+
+  const customProjects = readCustomProjects().filter((project) => project.id !== workspaceId);
+  const updated: ProjectWorkspace = {
+    ...workspace,
+    builtin: workspace.builtin ? false : workspace.builtin,
+    projectGroups: workspace.projectGroups.filter((g) => g.id !== groupId),
+  };
+  writeCustomProjects([...customProjects, updated]);
+  return updated;
+}
+
+export async function removeProjectGroup(workspaceId: string, groupId: string): Promise<ProjectWorkspace> {
+  const res = await authFetch(`/api/project-workspaces/${encodeURIComponent(workspaceId)}/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+  const workspace = await readApiJson<ProjectWorkspace>(res);
+  await loadProjectWorkspaces();
+  return workspace;
 }
 
 export function getWorkspaceProjectGroups(workspaceId: string): ProjectGroup[] {

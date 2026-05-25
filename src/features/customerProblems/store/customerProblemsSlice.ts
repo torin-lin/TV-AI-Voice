@@ -20,10 +20,15 @@ interface CustomerProblemsState {
   qaItems: CustomerProblem[];
   loading: boolean;
   error: string | null;
+  activeCustomerWorkspaceId: string;
+  activeQaWorkspaceId: string;
   filters: {
     keyword?: string;
     classification?: string;
     status?: string;
+    firmwareVersion?: string;
+    startDate?: number;
+    endDate?: number;
   };
   customerPagination: { page: number; pageSize: number; total: number };
   qaPagination: { page: number; pageSize: number; total: number };
@@ -35,6 +40,8 @@ const initialState: CustomerProblemsState = {
   qaItems: [],
   loading: false,
   error: null,
+  activeCustomerWorkspaceId: '',
+  activeQaWorkspaceId: '',
   filters: {},
   customerPagination: { page: 1, pageSize: 10, total: 0 },
   qaPagination: { page: 1, pageSize: 10, total: 0 },
@@ -44,7 +51,7 @@ const initialState: CustomerProblemsState = {
 /** 获取客户问题列表 */
 export const fetchCustomerProblems = createAsyncThunk(
   'customerProblems/fetchCustomerProblems',
-  async (params: ProblemQueryParams, { rejectWithValue }) => {
+  async (params: ProblemQueryParams & { workspaceId?: string }, { rejectWithValue }) => {
     try {
       return await apiQueryProblems({ ...params, problemType: 'customer' });
     } catch (error) {
@@ -56,7 +63,7 @@ export const fetchCustomerProblems = createAsyncThunk(
 /** 获取QA问题列表 */
 export const fetchQaProblems = createAsyncThunk(
   'customerProblems/fetchQaProblems',
-  async (params: ProblemQueryParams, { rejectWithValue }) => {
+  async (params: ProblemQueryParams & { workspaceId?: string }, { rejectWithValue }) => {
     try {
       return await apiQueryProblems({ ...params, problemType: 'qa' });
     } catch (error) {
@@ -125,21 +132,43 @@ const customerProblemsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchCustomerProblems.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchCustomerProblems.pending, (state, action) => {
+        state.loading = true;
+        state.error = null;
+        state.activeCustomerWorkspaceId = action.meta.arg.workspaceId || '';
+        state.customerItems = [];
+        state.customerPagination.total = 0;
+      })
       .addCase(fetchCustomerProblems.fulfilled, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeCustomerWorkspaceId) return;
         state.loading = false;
         state.customerItems = action.payload.data;
         state.customerPagination.total = action.payload.total;
       })
-      .addCase(fetchCustomerProblems.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
+      .addCase(fetchCustomerProblems.rejected, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeCustomerWorkspaceId) return;
+        state.loading = false;
+        state.error = action.payload as string;
+      })
 
-      .addCase(fetchQaProblems.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchQaProblems.pending, (state, action) => {
+        state.loading = true;
+        state.error = null;
+        state.activeQaWorkspaceId = action.meta.arg.workspaceId || '';
+        state.qaItems = [];
+        state.qaPagination.total = 0;
+      })
       .addCase(fetchQaProblems.fulfilled, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeQaWorkspaceId) return;
         state.loading = false;
         state.qaItems = action.payload.data;
         state.qaPagination.total = action.payload.total;
       })
-      .addCase(fetchQaProblems.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
+      .addCase(fetchQaProblems.rejected, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeQaWorkspaceId) return;
+        state.loading = false;
+        state.error = action.payload as string;
+      })
 
       .addCase(createProblem.fulfilled, (state, action) => {
         if (action.payload.problemType === 'customer') {

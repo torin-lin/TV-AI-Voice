@@ -18,21 +18,21 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const baseClasses =
-    'font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
+    'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-60';
 
   const variantClasses = {
     primary:
-      'bg-gradient-to-r from-blue-600 to-cyan-500 text-white hover:from-blue-700 hover:to-cyan-600 focus:ring-blue-500 disabled:from-gray-400 disabled:to-gray-400 btn-shimmer',
+      'bg-indigo-600 text-white shadow-sm shadow-indigo-600/10 hover:bg-indigo-700 disabled:bg-slate-300',
     secondary:
-      'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 disabled:bg-gray-100 disabled:text-gray-400',
+      'border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 disabled:bg-slate-50 disabled:text-slate-400',
     danger:
-      'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 disabled:bg-red-400',
+      'bg-rose-600 text-white shadow-sm shadow-rose-600/10 hover:bg-rose-700 disabled:bg-slate-300',
   };
 
   const sizeClasses = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
+    sm: 'h-8 px-3 text-sm',
+    md: 'h-10 px-4 text-sm',
+    lg: 'h-11 px-5 text-base',
   };
 
   return (

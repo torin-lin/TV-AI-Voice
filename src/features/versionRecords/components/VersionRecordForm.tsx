@@ -9,6 +9,7 @@ import { formatFileSize } from '../../../services/ApkUploadService';
 import { apiGetEligibleQaReleaseNotes, EligibleQaReleaseNoteInfo } from '../../../services/ReleaseNoteApiClient';
 import { DEFAULT_MODULE_OPTIONS, RISK_LEVEL_OPTIONS, TEST_RESULT_OPTIONS, VERSION_STATUS_OPTIONS } from '../../../config/dictionaries';
 import { useWorkspaceProjectOptions } from '../../../hooks/useWorkspaceProjectOptions';
+import { useProjectRoles } from '../../../auth/useProjectRoles';
 
 interface VersionRecordFormProps {
   record?: VersionRecord | null;
@@ -126,6 +127,7 @@ const LinkedIssuesInput: React.FC<{
 
 const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultProjectType, onSubmit, onCancel, loading = false }) => {
   const projectOptions = useWorkspaceProjectOptions();
+  const { qaNames, allMemberNames } = useProjectRoles();
   const [formData, setFormData] = useState<Partial<VersionRecord>>({
     versionNumber: '',
     firmwareVersion: '',
@@ -342,14 +344,27 @@ const VersionRecordForm: React.FC<VersionRecordFormProps> = ({ record, defaultPr
           <label className="block text-sm font-medium text-gray-700 mb-1">
             介入责任人 <span className="text-red-500">*</span>
           </label>
-          <Input
-            type="text"
-            name="qaEarlyInterventionOwner"
-            value={formData.qaEarlyInterventionOwner || ''}
-            onChange={handleInputChange}
-            placeholder="填写本次提前介入的责任人"
-            error={errors.qaEarlyInterventionOwner}
-          />
+          <div className="flex gap-2">
+            <select
+              name="qaEarlyInterventionOwner"
+              value={formData.qaEarlyInterventionOwner || ''}
+              onChange={handleInputChange}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">选择成员...</option>
+              {(qaNames.length > 0 ? qaNames : allMemberNames).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <Input
+              type="text"
+              name="qaEarlyInterventionOwner"
+              value={formData.qaEarlyInterventionOwner || ''}
+              onChange={handleInputChange}
+              placeholder="或自定义输入"
+              error={errors.qaEarlyInterventionOwner}
+            />
+          </div>
           <p className="text-xs text-gray-400 mt-1">建议填写当前主跟进人，便于后续回溯和催办。</p>
         </div>
       )}

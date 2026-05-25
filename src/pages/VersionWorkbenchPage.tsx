@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -14,6 +15,7 @@ import { fetchVersionIssues } from '../services/VersionIssueApiClient';
 import { apiGetRecommendation } from '../services/KnowledgeBaseApiClient';
 import { getAllowedVersionStatuses, getVersionStatusClass } from '../features/versionRecords/versionStatus';
 import { useToast } from '../components/common/ToastProvider';
+import { RootState } from '../store';
 
 type ReleaseDecision = NonNullable<VersionRecord['releaseDecision']>;
 type TimelineEvent = {
@@ -99,8 +101,10 @@ const VersionWorkbenchPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const projectType = searchParams.get('projectType') || '';
   const projectGroup = projectType ? PROJECT_LABEL_MAP[projectType] : undefined;
+  const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
   const { formatDateTime } = useI18n();
   const { showToast } = useToast();
+  const loadSeqRef = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -128,9 +132,15 @@ const VersionWorkbenchPage: React.FC = () => {
   });
 
   useEffect(() => {
+    const loadSeq = ++loadSeqRef.current;
     const load = async () => {
       setLoading(true);
       setPageError(null);
+      setVersionRecords([]);
+      setReleaseNotes([]);
+      setProblems([]);
+      setVersionIssues([]);
+      setRecommendation(null);
 
       try {
         const [recordResult, releaseResult, problemResult] = await Promise.all([
@@ -150,6 +160,7 @@ const VersionWorkbenchPage: React.FC = () => {
         const relatedRecords = recordResult.data.filter(
           (record) => (record.parentVersion || record.versionNumber) === versionKey
         );
+        if (loadSeq !== loadSeqRef.current) return;
         setVersionRecords(relatedRecords);
 
         const versionSet = new Set<string>([versionKey, ...relatedRecords.map((record) => record.versionNumber)]);
@@ -164,6 +175,7 @@ const VersionWorkbenchPage: React.FC = () => {
             Boolean(note.fixedPRs?.some((pr) => linkedIssueSet.has(pr)))
           );
         });
+        if (loadSeq !== loadSeqRef.current) return;
         setReleaseNotes(relatedReleaseNotes);
 
         const relatedProblems = problemResult.data.filter((problem) => {
@@ -177,6 +189,7 @@ const VersionWorkbenchPage: React.FC = () => {
 
           return false;
         });
+        if (loadSeq !== loadSeqRef.current) return;
         setProblems(relatedProblems);
 
         const issueResults = await Promise.all(
@@ -184,6 +197,7 @@ const VersionWorkbenchPage: React.FC = () => {
             .filter((record): record is VersionRecord & { id: string } => Boolean(record.id))
             .map((record) => fetchVersionIssues(record.id!))
         );
+        if (loadSeq !== loadSeqRef.current) return;
         setVersionIssues(issueResults.flat().sort((a, b) => b.createdAt - a.createdAt));
 
         const latest = [...relatedRecords].sort((a, b) => b.createdAt - a.createdAt)[0];
@@ -198,14 +212,15 @@ const VersionWorkbenchPage: React.FC = () => {
           });
         }
       } catch (err) {
+        if (loadSeq !== loadSeqRef.current) return;
         setPageError((err as Error).message || '加载失败');
       } finally {
-        setLoading(false);
+        if (loadSeq === loadSeqRef.current) setLoading(false);
       }
     };
 
     void load();
-  }, [projectGroup, versionKey]);
+  }, [currentWorkspace, projectGroup, versionKey]);
 
   const latestRecord = useMemo(() => {
     return [...versionRecords].sort((a, b) => b.createdAt - a.createdAt)[0];
@@ -355,6 +370,32 @@ const VersionWorkbenchPage: React.FC = () => {
     summary.openIssueCount,
     summary.unresolvedProblems,
     versionRecords,
+  ]);
+
+  const checklistPassedCount = useMemo(
+    () => releaseChecklist.filter((item) => item.passed).length,
+    [releaseChecklist]
+  );
+
+  const checklistProgress = releaseChecklist.length
+    ? Math.round((checklistPassedCount / releaseChecklist.length) * 100)
+    : 0;
+
+  const primaryBlocker = useMemo(() => {
+    if (summary.openIssueCount > 0) return `${summary.openIssueCount} 个版本问题未闭环`;
+    if (summary.unresolvedProblems > 0) return `${summary.unresolvedProblems} 个追踪问题未解决`;
+    if (rdSummary.failedCount > 0) return `${rdSummary.failedCount} 条 RD 冒烟失败`;
+    if (rdSummary.pendingCount > 0) return `${rdSummary.pendingCount} 条 RD 冒烟未补齐`;
+    if (!latestRecord) return '当前版本暂无 QA 测试记录';
+    if (!conclusionDraft.conclusionSummary.trim()) return '结论摘要待填写';
+    return '暂无明显阻塞';
+  }, [
+    conclusionDraft.conclusionSummary,
+    latestRecord,
+    rdSummary.failedCount,
+    rdSummary.pendingCount,
+    summary.openIssueCount,
+    summary.unresolvedProblems,
   ]);
 
   const timelineEvents = useMemo<TimelineEvent[]>(() => {
@@ -568,61 +609,113 @@ const VersionWorkbenchPage: React.FC = () => {
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-6 bg-slate-50 min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-gray-900">版本工作台</h1>
-              <Tag variant="primary" className={getRiskClass(latestRecord?.riskLevel)}>
-                {latestRecord?.riskLevel || '-'}
-              </Tag>
-              <Tag variant="primary" className={getVersionStatusClass(latestRecord?.versionStatus || conclusionDraft.versionStatus)}>
-                {latestRecord?.versionStatus || conclusionDraft.versionStatus}
-              </Tag>
-            </div>
-            <p className="text-gray-600 mt-2">围绕版本聚合变更、测试、问题和推荐信息</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-sm text-gray-500">
-              <span>主版本: <span className="font-semibold text-gray-900">{versionKey}</span></span>
-              {latestRecord?.projectType && (
-                <span>项目: <span className="font-semibold text-gray-900">{latestRecord.projectType}</span></span>
-              )}
-              {latestRecord?.createdAt && (
-                <span>最近更新: <span className="font-semibold text-gray-900">{formatDateTime(latestRecord.createdAt)}</span></span>
-              )}
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-5">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-900">版本工作台</h1>
+                  <Tag variant="primary" className={getRiskClass(latestRecord?.riskLevel)}>
+                    风险 {latestRecord?.riskLevel || '-'}
+                  </Tag>
+                  <Tag variant="primary" className={getVersionStatusClass(latestRecord?.versionStatus || conclusionDraft.versionStatus)}>
+                    {latestRecord?.versionStatus || conclusionDraft.versionStatus}
+                  </Tag>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
+                  <span>项目空间 <span className="font-semibold text-slate-900">{currentWorkspace}</span></span>
+                  <span>主版本 <span className="font-semibold text-slate-900">{versionKey}</span></span>
+                  {latestRecord?.projectType && (
+                    <span>项目类型 <span className="font-semibold text-slate-900">{latestRecord.projectType}</span></span>
+                  )}
+                  {latestRecord?.updatedAt && (
+                    <span>最近更新 <span className="font-semibold text-slate-900">{formatDateTime(latestRecord.updatedAt)}</span></span>
+                  )}
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-medium text-slate-500">准出完成度</p>
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
+                        <div className="h-full rounded-full bg-indigo-600" style={{ width: `${checklistProgress}%` }} />
+                      </div>
+                      <span className="text-sm font-semibold text-slate-900">{checklistProgress}%</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-medium text-slate-500">主要阻塞</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-slate-900" title={primaryBlocker}>{primaryBlocker}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-medium text-slate-500">推荐状态</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Tag variant="primary" className={getVersionStatusClass(suggestedVersionStatus)}>
+                        {suggestedVersionStatus}
+                      </Tag>
+                      {suggestedVersionStatus !== conclusionDraft.versionStatus && (
+                        <button
+                          type="button"
+                          onClick={() => setConclusionDraft((prev) => ({ ...prev, versionStatus: suggestedVersionStatus }))}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                        >
+                          应用
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link to={`/release-notes?keyword=${encodeURIComponent(versionKey)}`}>
+                  <Button variant="secondary">查看 RD</Button>
+                </Link>
+                <Link to={`/customer-problems?keyword=${encodeURIComponent((latestRecord?.linkedIssues && latestRecord.linkedIssues[0]) || latestRecord?.firmwareVersion || versionKey)}`}>
+                  <Button variant="secondary">查看问题</Button>
+                </Link>
+                <Link to="/version-records">
+                  <Button variant="secondary">返回版本记录</Button>
+                </Link>
+                <Button onClick={handleGenerateRecommendation} disabled={recommendLoading || !latestRecord}>
+                  {recommendLoading ? '生成中...' : '生成测试推荐'}
+                </Button>
+              </div>
             </div>
           </div>
-          <div className="flex gap-3">
-            <Link to={`/release-notes?keyword=${encodeURIComponent(versionKey)}`}>
-              <Button variant="secondary">查看 RD</Button>
-            </Link>
-            <Link to={`/customer-problems?keyword=${encodeURIComponent((latestRecord?.linkedIssues && latestRecord.linkedIssues[0]) || latestRecord?.firmwareVersion || versionKey)}`}>
-              <Button variant="secondary">查看问题</Button>
-            </Link>
-            <Link to="/version-records">
-              <Button variant="secondary">返回版本记录</Button>
-            </Link>
-            <Button onClick={handleGenerateRecommendation} disabled={recommendLoading || !latestRecord}>
-              {recommendLoading ? '生成中...' : '生成测试推荐'}
-            </Button>
+
+          <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 md:grid-cols-3 xl:grid-cols-6 xl:divide-y-0">
+            {[
+              { label: '版本记录', value: summary.recordCount, color: 'text-indigo-600' },
+              { label: 'Release Note', value: summary.releaseCount, color: 'text-violet-600' },
+              { label: '版本问题', value: summary.issueCount, color: 'text-orange-600' },
+              { label: '未闭环版本问题', value: summary.openIssueCount, color: 'text-red-600' },
+              { label: '关联问题追踪', value: summary.problemCount, color: 'text-cyan-600' },
+              { label: '未解决问题追踪', value: summary.unresolvedProblems, color: 'text-rose-600' },
+            ].map((item) => (
+              <div key={item.label} className="px-5 py-4">
+                <p className="text-xs font-medium text-slate-500">{item.label}</p>
+                <p className={`mt-2 text-3xl font-bold ${item.color}`}>{item.value}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
-          {[
-            { label: '版本记录', value: summary.recordCount, color: 'text-blue-600' },
-            { label: 'Release Note', value: summary.releaseCount, color: 'text-violet-600' },
-            { label: '版本问题', value: summary.issueCount, color: 'text-orange-600' },
-            { label: '未闭环版本问题', value: summary.openIssueCount, color: 'text-red-600' },
-            { label: '关联问题追踪', value: summary.problemCount, color: 'text-cyan-600' },
-            { label: '未解决问题追踪', value: summary.unresolvedProblems, color: 'text-rose-600' },
-          ].map((item) => (
-            <Card key={item.label} className="p-4">
-              <p className="text-sm text-gray-500">{item.label}</p>
-              <p className={`text-3xl font-bold mt-2 ${item.color}`}>{item.value}</p>
-            </Card>
-          ))}
-        </div>
+        {!latestRecord && (
+          <Card className="border border-amber-200 bg-amber-50">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold text-amber-900">当前项目空间下没有找到这个版本</h2>
+                <p className="mt-1 text-sm text-amber-800">
+                  请确认顶部独立项目是否正确，或先在 QA版本记录中创建主版本为 {versionKey} 的测试记录。
+                </p>
+              </div>
+              <Link to="/version-records">
+                <Button variant="secondary">去 QA版本记录</Button>
+              </Link>
+            </div>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           <Card className="xl:col-span-2">
@@ -926,7 +1019,7 @@ const VersionWorkbenchPage: React.FC = () => {
             <div className="flex items-center justify-between gap-3 mb-4">
               <h2 className="text-xl font-bold text-gray-900">发布前检查清单</h2>
               <span className="text-sm text-gray-500">
-                {releaseChecklist.filter((item) => item.passed).length}/{releaseChecklist.length}
+                {checklistPassedCount}/{releaseChecklist.length}
               </span>
             </div>
             <div className="space-y-3">

@@ -16,6 +16,7 @@ interface ReleaseNotesState {
   items: ReleaseNote[];
   loading: boolean;
   error: string | null;
+  activeWorkspaceId: string;
   filters: QueryFilter;
   pagination: { page: number; pageSize: number; total: number };
   sorting: { field: string; order: 'asc' | 'desc' };
@@ -25,6 +26,7 @@ const initialState: ReleaseNotesState = {
   items: [],
   loading: false,
   error: null,
+  activeWorkspaceId: '',
   filters: {},
   pagination: { page: 1, pageSize: 20, total: 0 },
   sorting: { field: 'createdAt', order: 'desc' },
@@ -32,7 +34,7 @@ const initialState: ReleaseNotesState = {
 
 export const fetchReleaseNotes = createAsyncThunk(
   'releaseNotes/fetchReleaseNotes',
-  async ({ filters, pagination }: { filters: QueryFilter; pagination: PaginationOptions }, { rejectWithValue }) => {
+  async ({ filters, pagination }: { filters: QueryFilter; pagination: PaginationOptions; workspaceId?: string }, { rejectWithValue }) => {
     try { return await apiQueryReleaseNotes(filters, pagination); }
     catch (error) { return rejectWithValue((error as Error).message); }
   }
@@ -83,9 +85,24 @@ const releaseNotesSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchReleaseNotes.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchReleaseNotes.fulfilled, (state, action) => { state.loading = false; state.items = action.payload.data; state.pagination.total = action.payload.total; })
-      .addCase(fetchReleaseNotes.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })
+      .addCase(fetchReleaseNotes.pending, (state, action) => {
+        state.loading = true;
+        state.error = null;
+        state.activeWorkspaceId = action.meta.arg.workspaceId || '';
+        state.items = [];
+        state.pagination.total = 0;
+      })
+      .addCase(fetchReleaseNotes.fulfilled, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeWorkspaceId) return;
+        state.loading = false;
+        state.items = action.payload.data;
+        state.pagination.total = action.payload.total;
+      })
+      .addCase(fetchReleaseNotes.rejected, (state, action) => {
+        if ((action.meta.arg.workspaceId || '') !== state.activeWorkspaceId) return;
+        state.loading = false;
+        state.error = action.payload as string;
+      })
       .addCase(createReleaseNote.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(createReleaseNote.fulfilled, (state, action) => { state.loading = false; state.items.unshift(action.payload as ReleaseNote); })
       .addCase(createReleaseNote.rejected, (state, action) => { state.loading = false; state.error = action.payload as string; })

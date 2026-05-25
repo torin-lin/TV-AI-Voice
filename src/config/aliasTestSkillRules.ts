@@ -210,6 +210,14 @@ const LLM_CHAT_TOPIC_PATTERNS: RegExp[] = [
 
 const LLM_CHAT_CALCULATION_PATTERN = /\b\d+(?:\.\d+)?\s*(?:plus|minus|times|multiplied by|divided by|over)\s*\d+/;
 
+const WEATHER_PATTERNS: RegExp[] = [
+  /\b(weather|forecast|temperature|rain|snow|sunny|cloudy|wind|humidity|storm)\b/,
+  /(天气|气温|温度|下雨|下雪|晴天|阴天|刮风|湿度|暴风)/,
+  /(天気|気温|雨|雪|晴れ|曇り|風)/,
+  /(날씨|기온|비|눈|맑음|흐림|바람)/,
+  /(погода|температура|дождь|снег|ветер)/,
+];
+
 function normalizeQuestion(value: unknown): string {
   return String(value ?? '')
     .replace(/[\uFEFF\u200B-\u200D\u2060]/g, '')
@@ -267,6 +275,14 @@ export function inferExpectedSkill(question: string, langCode = ''): SkillInfere
     return {
       skill: 'Movie Search Skill',
       reason: '命令包含影片类关键词，且带有推荐/搜索/观看意图，按影片搜索处理',
+    };
+  }
+
+  // 天气查询优先于 LLM Chat
+  if (WEATHER_PATTERNS.some((pattern) => pattern.test(q))) {
+    return {
+      skill: 'Weather Skill',
+      reason: '命令包含天气相关关键词（weather/forecast/天气等），按天气技能处理',
     };
   }
 

@@ -25,7 +25,12 @@ import { setupIssueAttachmentRoutes } from './src/server/routes/issueAttachments
 import { setupVersionRecordRoutes } from './src/server/routes/versionRecords';
 import { setupKnowledgeBaseRoutes } from './src/server/routes/knowledgeBase';
 import { setupAliasTestRoutes } from './src/server/routes/aliasTest';
+import { setupMitmRoutes } from './src/server/routes/mitmProxy';
 import { setupVoiceAutomationRoutes } from './src/server/routes/voiceAutomation';
+import { setupAuthRoutes } from './src/server/routes/auth';
+import { setupProjectWorkspaceRoutes } from './src/server/routes/projectWorkspaces';
+import { identifyUser, requireBusinessApiAccess } from './src/server/middleware/auth';
+import { auditLogMiddleware, queryAuditLogs } from './src/server/middleware/auditLog';
 import { initSqlite, closeSqlite } from './src/server/storage/sqlite';
 
 // 加载环境变量
@@ -34,11 +39,13 @@ dotenv.config();
 // 创建 Express 应用
 const app: Express = express();
 const PORT = process.env.PORT || 3000;
+const PUBLIC_DOWNLOAD_DIR = path.join(process.cwd(), 'public', 'downloads');
 
 // 中间件
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cors());
+app.use('/downloads', express.static(PUBLIC_DOWNLOAD_DIR));
 
 // 请求日志
 app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -48,6 +55,49 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // 初始化 SQLite 数据库
 initSqlite();
+
+// 认证中间件：识别用户身份
+app.use(identifyUser);
+
+// 审计日志中间件：记录所有写操作（放在 identifyUser 之后，这样能获取到用户信息）
+app.use(auditLogMiddleware);
+
+// 认证路由（登录/注册/用户管理）—— 放在登录守卫之前，路由内部自行控制权限
+setupAuthRoutes(app);
+setupProjectWorkspaceRoutes(app);
+
+// 上线模式：所有业务 API 均要求登录
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method === 'OPTIONS') {
+    next();
+    return;
+  }
+  if (req.path === '/health') {
+    next();
+    return;
+  }
+  if (req.path.startsWith('/api/auth/')) {
+    next();
+    return;
+  }
+  requireBusinessApiAccess(req, res, next);
+});
+
+// 审计日志查询 API（管理员）
+app.get('/api/audit-logs', (req: Request, res: Response) => {
+  if (!req.user || req.user.systemRole !== 'admin') {
+    return res.status(403).json({ success: false, message: '仅管理员可查看审计日志' });
+  }
+  const { page, pageSize, userId, resource, action } = req.query;
+  const result = queryAuditLogs({
+    page: page ? Number(page) : 1,
+    pageSize: pageSize ? Number(pageSize) : 50,
+    userId: userId as string | undefined,
+    resource: resource as string | undefined,
+    action: action as string | undefined,
+  });
+  res.json({ success: true, data: result.data, total: result.total });
+});
 
 // 设置 APK 上传路由
 setupApkUploadRoutes(app);
@@ -64,11 +114,11 @@ setupCustomerProblemRoutes(app);
 // 设置 zmind 代理路由
 setupZmindProxyRoutes(app);
 
-// 设置版本问题路由
-setupVersionIssueRoutes(app);
-
 // 设置版本问题附件路由
 setupIssueAttachmentRoutes(app);
+
+// 设置版本问题路由
+setupVersionIssueRoutes(app);
 
 // 设置版本记录路由
 setupVersionRecordRoutes(app);
@@ -81,6 +131,13 @@ setupAliasTestRoutes(app);
 
 // 设置语音自动化代理路由
 setupVoiceAutomationRoutes(app);
+
+// 创建 HTTP server（用于 WebSocket 支持）
+import http from 'http';
+const httpServer = http.createServer(app);
+
+// 设置 MITM 代理路由（需要在静态文件托管之前注册）
+setupMitmRoutes(app, httpServer);
 
 // 健康检查端点
 app.get('/health', (_req: Request, res: Response) => {
@@ -104,7 +161,7 @@ if (fs.existsSync(distPath)) {
   // 开发模式：显示 API 信息
   app.get('/', (_req: Request, res: Response) => {
     res.json({
-      name: 'Release Note Server',
+      name: 'Project Delivery Management Platform',
       version: '1.0.0',
       hint: '运行 npm run build 后重启服务器，即可通过 3000 端口直接访问前端页面',
       endpoints: {
@@ -138,10 +195,10 @@ if (fs.existsSync(distPath)) {
 }
 
 // 启动服务器
-app.listen(PORT, '0.0.0.0', () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
-║         Release Note Server 已启动                         ║
+║         项目交付管理平台服务已启动                         ║
 ╠════════════════════════════════════════════════════════════╣
 ║ 服务器地址: http://localhost:${PORT}                       ║
 ║ APK 上传: http://localhost:${PORT}/api/apk/upload          ║

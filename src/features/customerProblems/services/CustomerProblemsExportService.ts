@@ -1,6 +1,6 @@
 import { CustomerProblem } from '../../../types/database';
-import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import { exportRowsToExcel } from '../../../services/ExcelWorkbookService';
 
 /**
  * 客户问题/QA问题导出服务
@@ -19,18 +19,10 @@ const mapProblemToRow = (p: CustomerProblem) => ({
   更新时间: new Date(p.updatedAt).toLocaleString('zh-CN'),
 });
 
-export const exportToExcel = (problems: CustomerProblem[], filename: string) => {
+export const exportToExcel = async (problems: CustomerProblem[], filename: string) => {
   try {
     const data = problems.map(mapProblemToRow);
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, '问题记录');
-    worksheet['!cols'] = [
-      { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 30 },
-      { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 20 },
-      { wch: 18 }, { wch: 18 },
-    ];
-    XLSX.writeFile(workbook, filename);
+    await exportRowsToExcel(data, filename, '问题记录', [10, 10, 20, 30, 10, 10, 12, 20, 18, 18]);
   } catch (error) {
     console.error('导出 Excel 失败:', error);
     throw new Error('导出 Excel 失败');

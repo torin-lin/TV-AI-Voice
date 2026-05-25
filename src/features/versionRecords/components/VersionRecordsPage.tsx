@@ -13,6 +13,7 @@ import { VersionRecord } from '../../../types/database';
 import VersionRecordsTable from './VersionRecordsTable';
 import VersionRecordFilters from './VersionRecordFilters';
 import VersionRecordModal from './VersionRecordModal';
+import { usePermission } from '../../../auth/usePermission';
 import { Button } from '../../../components/common/Button';
 import { exportToExcel, exportToCSV } from '../services/VersionRecordsExportService';
 import { useI18n } from '../../../i18n/I18nProvider';
@@ -25,6 +26,7 @@ const VersionRecordsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
+  const permission = usePermission();
   const {
     items,
     loading,
@@ -34,6 +36,7 @@ const VersionRecordsPage: React.FC = () => {
     sorting,
   } = useSelector((state: RootState) => state.versionRecords);
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
+  const currentWorkspace = useSelector((state: RootState) => state.project.currentWorkspace);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<VersionRecord | null>(null);
@@ -48,18 +51,24 @@ const VersionRecordsPage: React.FC = () => {
   }, [dispatch, filters, keywordFromUrl, pagination.pageSize]);
 
   useEffect(() => {
+    const queryPagination = { page: pagination.page, pageSize: pagination.pageSize };
     dispatch(
       fetchVersionRecords({
         filters: { ...filters, projectGroup: currentProject },
-        pagination,
+        pagination: queryPagination,
+        workspaceId: currentWorkspace,
       })
     );
-  }, [dispatch, filters, pagination, currentProject]);
+  }, [dispatch, filters, pagination.page, pagination.pageSize, currentProject, currentWorkspace]);
 
   // modal 关闭后重新加载
   const closeModalAndRefresh = () => {
     setIsModalOpen(false);
-    dispatch(fetchVersionRecords({ filters: { ...filters, projectGroup: currentProject }, pagination }));
+    dispatch(fetchVersionRecords({
+      filters: { ...filters, projectGroup: currentProject },
+      pagination: { page: pagination.page, pageSize: pagination.pageSize },
+      workspaceId: currentWorkspace,
+    }));
   };
 
   // 处理添加新记录
@@ -122,6 +131,8 @@ const VersionRecordsPage: React.FC = () => {
             onClick={handleAddRecord}
             variant="primary"
             className="flex items-center gap-2"
+            disabled={!permission.canEditVersionRecords}
+            title={!permission.canEditVersionRecords ? '无权限，请登录或联系管理员' : undefined}
           >
             <span>+</span> 添加新记录
           </Button>

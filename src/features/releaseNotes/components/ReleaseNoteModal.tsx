@@ -11,6 +11,7 @@ import ReleaseNoteForm from './ReleaseNoteForm';
 interface ReleaseNoteModalProps {
   record?: ReleaseNote | null;
   defaultParentVersion?: string;
+  defaultProjectType?: string;
   onClose: () => void;
 }
 
@@ -18,13 +19,13 @@ interface ReleaseNoteModalProps {
  * Release Note 模态框组件
  * 用于添加和编辑 Release Note
  */
-const ReleaseNoteModal: React.FC<ReleaseNoteModalProps> = ({ record, defaultParentVersion, onClose }) => {
+const ReleaseNoteModal: React.FC<ReleaseNoteModalProps> = ({ record, defaultParentVersion, defaultProjectType: propProjectType, onClose }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { loading } = useSelector((state: RootState) => state.releaseNotes);
   const currentProject = useSelector((state: RootState) => state.project.currentProject);
 
   const projectTypeMap: Record<string, string> = { 'TV AI Voice': 'TV', 'Projector AI Voice': 'Projector', 'STB AI Voice': 'STB' };
-  const defaultProjectType = projectTypeMap[currentProject] || 'TV';
+  const defaultProjectType = propProjectType || projectTypeMap[currentProject] || 'TV';
 
   // 处理表单提交
   const handleSubmit = async (data: Partial<ReleaseNote>) => {

@@ -5,10 +5,14 @@ import { Input } from '../../../components/common/Input';
 import { Select } from '../../../components/common/Select';
 import { Textarea } from '../../../components/common/Textarea';
 import { uploadApk, formatFileSize, ApkUploadResult } from '../../../services/ApkUploadService';
-import { apiGetParentVersions, ParentVersionInfo } from '../../../services/ReleaseNoteApiClient';
 import {
-  DEFAULT_FEATURE_OPTIONS,
-  DEFAULT_MODULE_OPTIONS,
+  apiGetParentVersions,
+  apiGetProjectImpactTags,
+  apiSaveProjectImpactTags,
+  ParentVersionInfo,
+} from '../../../services/ReleaseNoteApiClient';
+import { uploadDoc, getDocDownloadUrl, DocUploadResult } from '../../../services/DocUploadService';
+import {
   MIGRATION_TYPE_OPTIONS,
   RELEASE_NOTE_CHANGE_TYPE_OPTIONS,
   RELEASE_NOTE_SEVERITY_OPTIONS,
@@ -16,6 +20,9 @@ import {
   TEST_RESULT_OPTIONS,
 } from '../../../config/dictionaries';
 import { useWorkspaceProjectOptions } from '../../../hooks/useWorkspaceProjectOptions';
+import { useProjectRoles } from '../../../auth/useProjectRoles';
+import { useAuth } from '../../../auth/AuthProvider';
+import { usePermission } from '../../../auth/usePermission';
 
 interface ReleaseNoteFormProps {
   record?: ReleaseNote | null;
@@ -40,7 +47,7 @@ const TagInput: React.FC<{
   suggestions: string[];
   error?: string;
   placeholder?: string;
-}> = ({ label, required, tags, onChange, suggestions, error }) => {
+}> = ({ label, required, tags, onChange, suggestions, error, placeholder }) => {
   const [customValue, setCustomValue] = useState('');
 
   // 未选择的预设选项
@@ -111,7 +118,7 @@ const TagInput: React.FC<{
           value={customValue}
           onChange={(e) => setCustomValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCustomAdd(); } }}
-          placeholder="自定义添加..."
+          placeholder={placeholder || '自定义添加...'}
           className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
@@ -140,6 +147,10 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
   loading = false,
 }) => {
   const projectOptions = useWorkspaceProjectOptions();
+  const { user, isAdmin } = useAuth();
+  const permission = usePermission();
+  const { defaultRdAuthor } = useProjectRoles();
+  const currentAuthor = user?.displayName || user?.username || '';
   const [formData, setFormData] = useState<Partial<ReleaseNote>>({
     version: '',
     parentVersion: defaultParentVersion || '',
@@ -158,6 +169,52 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
     fixedPRs: [],
     projectType: (defaultProjectType as any) || projectOptions[0]?.value || 'TV',
   });
+  const userTagStorageKey = `release_note_impact_tags_${user?.id || user?.username || 'anonymous'}`;
+  const defaultImpactOptions: string[] = [];
+  const [projectImpactOptions, setProjectImpactOptions] = useState<string[]>([]);
+  const [customImpactOptions, setCustomImpactOptions] = useState<string[]>([]);
+  const impactSuggestions = [...projectImpactOptions, ...customImpactOptions]
+    .filter((tag, index, arr) => tag && arr.indexOf(tag) === index);
+
+  const saveCustomImpactTags = (tags: string[]) => {
+    const defaults = new Set(defaultImpactOptions);
+    const nextCustomTags = [...customImpactOptions];
+    for (const tag of tags) {
+      const trimmed = tag.trim();
+      if (trimmed && !defaults.has(trimmed) && !nextCustomTags.includes(trimmed)) {
+        nextCustomTags.push(trimmed);
+      }
+    }
+    if (nextCustomTags.length !== customImpactOptions.length) {
+      setCustomImpactOptions(nextCustomTags);
+      localStorage.setItem(userTagStorageKey, JSON.stringify(nextCustomTags));
+    }
+  };
+
+  const handleImpactTagsChange = (tags: string[]) => {
+    saveCustomImpactTags(tags);
+    setFormData((prev) => ({ ...prev, affectedModules: tags, affectedFeatures: [] }));
+    if (errors.affectedModules) {
+      setErrors((prev) => { const n = { ...prev }; delete n.affectedModules; return n; });
+    }
+  };
+
+  const handleSaveProjectImpactTags = async () => {
+    const nextTags = [
+      ...projectImpactOptions,
+      ...(formData.affectedModules || []),
+    ].filter((tag, index, arr) => tag && arr.indexOf(tag) === index);
+    const saved = await apiSaveProjectImpactTags(nextTags);
+    setProjectImpactOptions(saved);
+  };
+
+  // 新建时自动带出项目成员
+  useEffect(() => {
+    if (!record && !formData.author) {
+      const nextAuthor = currentAuthor || defaultRdAuthor;
+      if (nextAuthor) setFormData((prev) => ({ ...prev, author: nextAuthor }));
+    }
+  }, [record, defaultRdAuthor, currentAuthor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apkFile, setApkFile] = useState<File | null>(null);
@@ -165,11 +222,36 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
   const [apkUploadProgress, setApkUploadProgress] = useState(0);
   const [apkUploadError, setApkUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [reportFile, setReportFile] = useState<File | null>(null);
+  const [reportUploading, setReportUploading] = useState(false);
+  const [reportUploadProgress, setReportUploadProgress] = useState(0);
+  const [reportUploadError, setReportUploadError] = useState('');
+  const reportInputRef = useRef<HTMLInputElement>(null);
   const [parentVersions, setParentVersions] = useState<ParentVersionInfo[]>([]);
 
   useEffect(() => {
-    if (record) setFormData(record);
+    if (record) {
+      const impactTags = [
+        ...(record.affectedModules || []),
+        ...(record.affectedFeatures || []),
+      ].filter((tag, index, arr) => tag && arr.indexOf(tag) === index);
+      setFormData({ ...record, affectedModules: impactTags, affectedFeatures: [] });
+      saveCustomImpactTags(impactTags);
+    }
   }, [record]);
+
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(userTagStorageKey) || '[]');
+      setCustomImpactOptions(Array.isArray(parsed) ? parsed.map((tag) => String(tag)).filter(Boolean) : []);
+    } catch {
+      setCustomImpactOptions([]);
+    }
+  }, [userTagStorageKey]);
+
+  useEffect(() => {
+    apiGetProjectImpactTags().then(setProjectImpactOptions).catch(() => setProjectImpactOptions([]));
+  }, []);
 
   // 加载大版本列表
   useEffect(() => {
@@ -180,10 +262,16 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
     const newErrors: Record<string, string> = {};
     if (!formData.version?.trim()) newErrors.version = '版本号不能为空';
     if (!formData.branch?.trim()) newErrors.branch = '分支名不能为空';
-    if (!formData.author?.trim()) newErrors.author = '作者不能为空';
+    if (!formData.author?.trim()) newErrors.author = '提交人不能为空';
+    if (!record && !isAdmin && permission.currentProjectRole !== 'rd') {
+      newErrors.author = '只有管理员或当前项目 RD 可以提交 Release Note';
+    }
+    if (!record && formData.author && formData.author !== currentAuthor) {
+      newErrors.author = '提交人必须是当前登录 RD';
+    }
     if (!formData.changeDescription?.trim()) newErrors.changeDescription = '修改内容不能为空';
     if (!formData.affectedModules || formData.affectedModules.length === 0) {
-      newErrors.affectedModules = '至少添加一个受影响的模块';
+      newErrors.affectedModules = '至少添加一个影响范围';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -193,7 +281,7 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
     e.preventDefault();
     if (!validateForm()) return;
 
-    let submitData = { ...formData };
+    let submitData = { ...formData, author: record ? formData.author : currentAuthor, affectedFeatures: [] };
 
     if (apkFile) {
       setApkUploading(true);
@@ -221,6 +309,34 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
         return;
       }
       setApkUploading(false);
+    }
+
+    if (reportFile) {
+      setReportUploading(true);
+      setReportUploadProgress(0);
+      setReportUploadError('');
+      try {
+        const result: DocUploadResult = await uploadDoc(reportFile, (percent) => {
+          setReportUploadProgress(percent);
+        });
+        if (result.success && result.data) {
+          submitData = {
+            ...submitData,
+            testReportFileName: result.data.fileName,
+            testReportFileSize: result.data.fileSize,
+            testReportFilePath: result.data.filePath,
+          };
+        } else {
+          setReportUploadError(result.message || '测试报告上传失败');
+          setReportUploading(false);
+          return;
+        }
+      } catch (error) {
+        setReportUploadError((error as Error).message || '测试报告上传失败，请检查服务端是否运行');
+        setReportUploading(false);
+        return;
+      }
+      setReportUploading(false);
     }
 
     onSubmit(submitData);
@@ -251,6 +367,35 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
       apkFileName: undefined,
       apkFileSize: undefined,
       apkFilePath: undefined,
+    }));
+  };
+
+  const handleReportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowedExt = ['.xlsx', '.xls', '.csv', '.pdf', '.doc', '.docx'];
+    if (!allowedExt.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+      setReportUploadError('支持上传 Excel、CSV、PDF、Word 测试报告');
+      return;
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      setReportUploadError('文件大小不能超过 100MB');
+      return;
+    }
+    setReportFile(file);
+    setReportUploadError('');
+  };
+
+  const handleRemoveReport = () => {
+    setReportFile(null);
+    setReportUploadError('');
+    setReportUploadProgress(0);
+    if (reportInputRef.current) reportInputRef.current.value = '';
+    setFormData((prev) => ({
+      ...prev,
+      testReportFileName: undefined,
+      testReportFileSize: undefined,
+      testReportFilePath: undefined,
     }));
   };
 
@@ -315,25 +460,22 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           />
         </div>
 
-        {/* 作者 */}
+        {/* 提交人 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            作者 <span className="text-red-500">*</span>
+            提交人 <span className="text-red-500">*</span>
           </label>
-          <div className="flex gap-2">
-            <select
-              name="author" value={formData.author || ''}
-              onChange={handleInputChange}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">选择或输入...</option>
-              <option value="jeson.zhang">jeson.zhang</option>
-            </select>
-            <Input
-              type="text" name="author" value={formData.author || ''}
-              onChange={handleInputChange} placeholder="自定义输入" error={errors.author}
-            />
-          </div>
+          <Input
+            type="text"
+            name="author"
+            value={record ? formData.author || '' : currentAuthor}
+            onChange={handleInputChange}
+            disabled
+            error={errors.author}
+          />
+          {!record && !isAdmin && permission.currentProjectRole !== 'rd' && (
+            <p className="text-amber-600 text-xs mt-1">当前账号不是管理员或该项目 RD，不能提交 Release Note。</p>
+          )}
         </div>
 
         {/* 项目类型 */}
@@ -346,19 +488,11 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
           />
         </div>
 
-        {/* 修改类型 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">修改类型</label>
-          <Select
-            name="changeType" value={formData.changeType || '功能'}
-            onChange={handleInputChange}
-            options={[...RELEASE_NOTE_CHANGE_TYPE_OPTIONS]}
-          />
-        </div>
-
         {/* 严重程度 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">严重程度</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            严重程度 <span className="text-red-500">*</span>
+          </label>
           <Select
             name="severity" value={formData.severity || '中'}
             onChange={handleInputChange}
@@ -367,46 +501,14 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">RD 冒烟测试</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">自测结果</label>
           <Select
             name="rdSmokeStatus"
             value={formData.rdSmokeStatus || '未测试'}
             onChange={handleInputChange}
             options={[...TEST_RESULT_OPTIONS]}
           />
-          <p className="text-xs text-gray-400 mt-1">用于记录研发提测前的基本自测结果，不再放在 QA 版本记录主流程里。</p>
-        </div>
-
-        {/* 回归风险 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">回归风险</label>
-          <Select
-            name="regressionRisk" value={formData.regressionRisk || '中'}
-            onChange={handleInputChange}
-            options={[...RISK_LEVEL_OPTIONS]}
-          />
-        </div>
-
-        {/* 迁移类型 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">迁移类型</label>
-          <Select
-            name="migrationType" value={formData.migrationType || '无'}
-            onChange={handleInputChange}
-            options={[...MIGRATION_TYPE_OPTIONS]}
-          />
-        </div>
-
-        {/* 破坏性变更 */}
-        <div className="flex items-center">
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <input
-              type="checkbox" name="breakingChanges"
-              checked={formData.breakingChanges || false}
-              onChange={handleInputChange} className="w-4 h-4 rounded border-gray-300"
-            />
-            破坏性变更
-          </label>
+          <p className="text-xs text-gray-400 mt-1">用于记录提交方在交付前的基础验证结果，便于后续测试或验收参考。</p>
         </div>
       </div>
 
@@ -417,52 +519,143 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
         </label>
         <Textarea
           name="changeDescription" value={formData.changeDescription || ''}
-          onChange={handleInputChange} placeholder="详细描述本次修改的内容" rows={3}
+          onChange={handleInputChange} placeholder="描述本次版本、配置或交付内容的变化" rows={3}
           error={errors.changeDescription}
         />
       </div>
 
-      {/* 修复 PR 列表 */}
+      {/* 影响范围 — 标签输入 */}
       <TagInput
-        label="修复 PR 列表"
-        tags={formData.fixedPRs || []}
-        onChange={(tags) => setFormData((prev) => ({ ...prev, fixedPRs: tags }))}
-        suggestions={[]}
-        placeholder="输入 PR/CR 号后回车添加"
-      />
-
-      {/* 受影响的模块 — 标签输入 */}
-      <TagInput
-        label="受影响的模块"
+        label="影响范围"
         required
         tags={formData.affectedModules || []}
-        onChange={(tags) => {
-          setFormData((prev) => ({ ...prev, affectedModules: tags }));
-          if (errors.affectedModules) {
-            setErrors((prev) => { const n = { ...prev }; delete n.affectedModules; return n; });
-          }
-        }}
-        suggestions={[...DEFAULT_MODULE_OPTIONS]}
+        onChange={handleImpactTagsChange}
+        suggestions={impactSuggestions}
         error={errors.affectedModules}
+        placeholder="输入模块、功能或影响范围后添加"
       />
+      {(formData.affectedModules || []).length > 0 && (
+        <button
+          type="button"
+          onClick={() => void handleSaveProjectImpactTags()}
+          className="text-xs font-medium text-blue-600 hover:text-blue-700"
+        >
+          保存当前影响范围为项目共享标签
+        </button>
+      )}
 
-      {/* 受影响的功能 — 标签输入 */}
-      <TagInput
-        label="受影响的功能"
-        tags={formData.affectedFeatures || []}
-        onChange={(tags) => setFormData((prev) => ({ ...prev, affectedFeatures: tags }))}
-        suggestions={[...DEFAULT_FEATURE_OPTIONS]}
-      />
-
-      {/* 测试备注 */}
+      {/* 测试报告上传 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">测试备注</label>
-        <Textarea
-          name="testingNotes" value={formData.testingNotes || ''}
-          onChange={handleInputChange}
-          placeholder="测试工程师需要关注的事项、测试建议等" rows={3}
-        />
+        <label className="block text-sm font-medium text-gray-700 mb-1">自测报告</label>
+        {formData.testReportFileName && !reportFile && (
+          <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg mb-2">
+            <div className="flex-1 min-w-0">
+              <a
+                href={formData.testReportFilePath ? getDocDownloadUrl(formData.testReportFilePath) : undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-green-800 hover:underline truncate block"
+              >
+                {formData.testReportFileName}
+              </a>
+              <p className="text-xs text-green-600">{formData.testReportFileSize ? formatFileSize(formData.testReportFileSize) : ''}</p>
+            </div>
+            <button type="button" onClick={handleRemoveReport} className="text-red-500 hover:text-red-700 text-sm">移除</button>
+          </div>
+        )}
+
+        {reportFile && (
+          <div className="flex items-center gap-3 p-3 bg-blue-100 border border-blue-300 rounded-lg mb-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-blue-700 truncate">{reportFile.name}</p>
+              <p className="text-xs text-blue-700">{formatFileSize(reportFile.size)} · 待上传</p>
+            </div>
+            <button type="button" onClick={handleRemoveReport} className="text-red-500 hover:text-red-700 text-sm">移除</button>
+          </div>
+        )}
+
+        {reportUploading && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+              <span>上传中...</span><span>{reportUploadProgress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${reportUploadProgress}%` }} />
+            </div>
+          </div>
+        )}
+
+        {reportUploadError && <p className="text-red-500 text-sm mb-2">{reportUploadError}</p>}
+
+        {!reportFile && !formData.testReportFileName && (
+          <div
+            className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-100 transition-colors"
+            onClick={() => reportInputRef.current?.click()}
+          >
+            <p className="text-sm text-gray-600">点击选择自测报告</p>
+            <p className="text-xs text-gray-400 mt-1">支持 Excel、CSV、PDF、Word，最大 100MB</p>
+          </div>
+        )}
+
+        <input ref={reportInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf,.doc,.docx" onChange={handleReportFileChange} className="hidden" />
       </div>
+
+      <details className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-gray-700">高级信息</summary>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">修改类型</label>
+            <Select
+              name="changeType" value={formData.changeType || '功能'}
+              onChange={handleInputChange}
+              options={[...RELEASE_NOTE_CHANGE_TYPE_OPTIONS]}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">回归风险</label>
+            <Select
+              name="regressionRisk" value={formData.regressionRisk || '中'}
+              onChange={handleInputChange}
+              options={[...RISK_LEVEL_OPTIONS]}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">迁移类型</label>
+            <Select
+              name="migrationType" value={formData.migrationType || '无'}
+              onChange={handleInputChange}
+              options={[...MIGRATION_TYPE_OPTIONS]}
+            />
+          </div>
+          <div className="flex items-center">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <input
+                type="checkbox" name="breakingChanges"
+                checked={formData.breakingChanges || false}
+                onChange={handleInputChange} className="w-4 h-4 rounded border-gray-300"
+              />
+              破坏性变更
+            </label>
+          </div>
+          <div className="md:col-span-2">
+            <TagInput
+              label="修复 PR 列表"
+              tags={formData.fixedPRs || []}
+              onChange={(tags) => setFormData((prev) => ({ ...prev, fixedPRs: tags }))}
+              suggestions={[]}
+              placeholder="输入 PR/CR 号后回车添加"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">测试备注</label>
+            <Textarea
+              name="testingNotes" value={formData.testingNotes || ''}
+              onChange={handleInputChange}
+              placeholder="需要关注的验证事项、风险提示或补充说明" rows={3}
+            />
+          </div>
+        </div>
+      </details>
 
       {/* APK 上传 */}
       <div>
@@ -525,9 +718,9 @@ const ReleaseNoteForm: React.FC<ReleaseNoteFormProps> = ({
 
       {/* 按钮 */}
       <div className="flex gap-3 justify-end pt-4">
-        <Button onClick={onCancel} variant="secondary" disabled={loading || apkUploading}>取消</Button>
-        <Button type="submit" variant="primary" disabled={loading || apkUploading}>
-          {apkUploading ? '上传 APK 中...' : loading ? '保存中...' : '保存'}
+        <Button onClick={onCancel} variant="secondary" disabled={loading || apkUploading || reportUploading}>取消</Button>
+        <Button type="submit" variant="primary" disabled={loading || apkUploading || reportUploading}>
+          {apkUploading ? '上传 APK 中...' : reportUploading ? '上传报告中...' : loading ? '保存中...' : '保存'}
         </Button>
       </div>
     </form>

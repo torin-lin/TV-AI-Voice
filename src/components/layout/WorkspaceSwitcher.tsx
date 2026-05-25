@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../store';
-import { setCurrentWorkspace } from '../../store/projectSlice';
+import { setCurrentProject, setCurrentWorkspace } from '../../store/projectSlice';
 import { ProjectWorkspace } from '../../config/projectRegistry';
 
 interface WorkspaceSwitcherProps {
@@ -14,15 +14,16 @@ const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ projects }) => {
 
   const handleChange = (workspaceId: string) => {
     dispatch(setCurrentWorkspace(workspaceId));
+    dispatch(setCurrentProject('全部'));
   };
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-700">独立项目:</span>
+      <span className="text-sm font-medium text-slate-600">独立项目:</span>
       <select
         value={currentWorkspace}
         onChange={(event) => handleChange(event.target.value)}
-        className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        className="h-9 cursor-pointer rounded-lg border border-transparent bg-transparent px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-100 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
       >
         {projects.map((project) => (
           <option key={project.id} value={project.id}>{project.name}</option>

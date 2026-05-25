@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../components/common/Button';
-import * as XLSX from 'xlsx';
 import { inferExpectedSkill } from '../config/aliasTestSkillRules';
+import { authFetch } from '../services/authFetch';
+import { exportRowsToExcel, readFirstWorksheetRows } from '../services/ExcelWorkbookService';
 
 interface AskResult {
   plannerResponse: any;
@@ -412,8 +413,8 @@ function mapBatchResult(
   };
 }
 
-function exportBatchResults(results: BatchResultItem[]): void {
-  const worksheet = XLSX.utils.json_to_sheet(results.map((item) => ({
+async function exportBatchResults(results: BatchResultItem[]): Promise<void> {
+  await exportRowsToExcel(results.map((item) => ({
     行号: item.sourceRow,
     Question: item.question,
     执行结果: item.success ? '成功' : '失败',
@@ -432,25 +433,7 @@ function exportBatchResults(results: BatchResultItem[]): void {
     标准名称: item.standardName || '-',
     匹配应用: item.matchedApps || '-',
     错误信息: item.error || '-',
-  })));
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, '批量测试结果');
-  worksheet['!cols'] = [
-    { wch: 8 },
-    { wch: 40 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 14 },
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 60 },
-    { wch: 24 },
-    { wch: 32 },
-    { wch: 40 },
-  ];
-  XLSX.writeFile(workbook, `alias-batch-results-${Date.now()}.xlsx`);
+  })), `alias-batch-results-${Date.now()}.xlsx`, '批量测试结果', [8, 40, 10, 10, 12, 20, 14, 20, 20, 60, 24, 32, 40, 18, 18, 24, 32, 40]);
 }
 
 const AliasTestPage: React.FC = () => {
@@ -475,7 +458,7 @@ const AliasTestPage: React.FC = () => {
 
   // 启动时检查服务端是否已有缓存的 token
   useEffect(() => {
-    fetch(`${getBaseUrl()}/api/alias-test/status`)
+    authFetch(`${getBaseUrl()}/api/alias-test/status`)
       .then(r => r.json())
       .then(d => { if (d.success) setTokenStatus(d.data); })
       .catch(() => {});
@@ -490,7 +473,7 @@ const AliasTestPage: React.FC = () => {
 
   const handleClearToken = async () => {
     try {
-      await fetch(`${getBaseUrl()}/api/alias-test/clear-token`, { method: 'POST' });
+      await authFetch(`${getBaseUrl()}/api/alias-test/clear-token`, { method: 'POST' });
       setTokenStatus({ hasUserToken: false, tokenPreview: '' });
       setUserToken('');
     } catch { /* ignore */ }
@@ -510,7 +493,7 @@ const AliasTestPage: React.FC = () => {
       if (userToken.trim()) {
         body.userToken = userToken.trim();
       }
-      const res = await fetch(`${getBaseUrl()}/api/alias-test/ask`, {
+      const res = await authFetch(`${getBaseUrl()}/api/alias-test/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -551,11 +534,7 @@ const AliasTestPage: React.FC = () => {
     setImporting(true);
     setImportFeedback(null);
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[firstSheetName];
-      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' });
+      const rows = await readFirstWorksheetRows(file);
       const parsed = rows
         .map((row, index) => {
           const rowEnv = normalizeBatchEnv(findOptionalRowValue(row, ['env', '环境']));
@@ -627,7 +606,7 @@ const AliasTestPage: React.FC = () => {
         };
         if (params.userToken) body.userToken = params.userToken;
 
-        const res = await fetch(`${getBaseUrl()}/api/alias-test/ask`, {
+        const res = await authFetch(`${getBaseUrl()}/api/alias-test/ask`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -892,7 +871,7 @@ const AliasTestPage: React.FC = () => {
               <Button onClick={runBatchAsk} variant="primary" disabled={batchRunning || batchQuestions.length === 0 || !hasToken}>
                 {batchRunning ? `执行中 ${batchProgress.completed}/${batchProgress.total}` : `批量执行 (${batchQuestions.length})`}
               </Button>
-              <Button onClick={() => exportBatchResults(batchResults)} variant="secondary" disabled={batchResults.length === 0}>
+              <Button onClick={() => void exportBatchResults(batchResults)} variant="secondary" disabled={batchResults.length === 0}>
                 导出结果
               </Button>
             </div>
@@ -1161,8 +1140,8 @@ const MovieSearchSummary: React.FC<{ data: any }> = ({ data }) => {
           <div className="rounded-lg bg-white px-3 py-2 text-sm text-gray-500">未返回影片数据</div>
         )}
 
-        <div className="grid gap-3">
-          {items.slice(0, 10).map((movie, index) => {
+        <div className="grid gap-3 max-h-[600px] overflow-y-auto">
+          {items.map((movie, index) => {
             const verticalUrl = movie.icon || movie.poster || '';
             const landscapeUrl = movie.poster && movie.poster !== verticalUrl ? movie.poster : '';
             const categories = Array.isArray(movie.moreInfo?.categories) ? movie.moreInfo.categories.filter((item: any) => item?.name) : [];
